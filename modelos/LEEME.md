@@ -22,8 +22,8 @@ Todos tienen entre 2,600 y 8,200 triángulos, por debajo del límite de Roblox.
 | Modelo | Qué es | Piezas al importar |
 |---|---|---|
 | **AbejaEclipse** | Abeja secreta (reina) de la zona de abejas: corona de oro, 4 alas, ojos y antenas cian, franjas doradas y aguijón magenta. | `Cuerpo`, `Alas`, `Brillo_Oro`, `Brillo_Cian`, `Brillo_Magenta` |
-| **GalloGuardian** | Gallo que cuida los nidos: casco y pechera de acero, hombreras, espolones y ojos rojos. | `Cuerpo`, `Brillo_Rojo` |
-| **OsoGuardian** | Oso guardián del panal: bandana roja, hombrera de panal, garrote con miel, bote de miel en el cinturón y ojos naranja. | `Cuerpo`, `Brillo_Naranja` |
+| **GalloGuardian** | Gallo que cuida los nidos: casco y pechera de acero, hombreras, espolones y ojos rojos. | `Cuerpo`, `Brillo_RojoBrillo` |
+| **OsoGuardian** | Oso guardián del panal: bandana roja, hombrera de panal, garrote con miel, bote de miel en el cinturón y ojos naranja. | `Cuerpo`, `Brillo_NaranjaBrillo` |
 
 ## Cómo importarlos a Roblox Studio
 
