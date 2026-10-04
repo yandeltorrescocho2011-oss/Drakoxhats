@@ -1,0 +1,3609 @@
+<roblox version="4">
+  <Item class="Folder" referent="0">
+    <Properties>
+      <string name="Name">SistemaCriaturas</string>
+    </Properties>
+    <Item class="Script" referent="1">
+      <Properties>
+        <string name="Name">Servidor</string>
+        <ProtectedString name="Source"><![CDATA[--[[
+	SISTEMA DE CRIATURAS (servidor)
+
+	Instalacion: pon la carpeta "SistemaCriaturas" en ServerScriptService. Despues importa los modelos FBX
+	de las criaturas y ponlos en el mapa (Workspace). El sistema los encuentra solo por su nombre
+	(o por el atributo "Tipo"), les pone articulaciones, animaciones, barra de vida, IA y habilidades.
+
+	Atributos que puedes poner en el modelo (Propiedades -> Atributos -> +):
+	  Modo   (string): "Guardian" (por defecto), "Pelea", "Mascota" o "Estatua".
+	  Equipo (string): en modo Pelea, las criaturas del mismo equipo no se atacan.
+	  Dueno  (string): en modo Mascota, el nombre del jugador al que sigue.
+	Los modelos que pongas en ServerStorage se usan como plantillas (por ejemplo PollitoBomba para el Huevo Mimico).
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterPlayer = game:GetService("StarterPlayer")
+local Players = game:GetService("Players")
+
+local carpeta = script.Parent
+local modulos = carpeta:WaitForChild("Modulos")
+
+-- Lo compartido (animaciones y configuraciones) va a ReplicatedStorage para que lo lean los clientes.
+local compartido = carpeta:FindFirstChild("Compartido")
+if compartido then
+	local viejo = ReplicatedStorage:FindFirstChild("SistemaCriaturasCompartido")
+	if viejo then
+		viejo:Destroy()
+	end
+	compartido.Name = "SistemaCriaturasCompartido"
+	compartido.Parent = ReplicatedStorage
+else
+	compartido = ReplicatedStorage:WaitForChild("SistemaCriaturasCompartido")
+end
+
+-- El animador corre en cada jugador.
+local animador = carpeta:FindFirstChild("AnimadorCliente")
+if animador then
+	local scripts = StarterPlayer:WaitForChild("StarterPlayerScripts")
+	if not scripts:FindFirstChild("AnimadorCriaturas") then
+		local copia = animador:Clone()
+		copia.Name = "AnimadorCriaturas"
+		copia.Parent = scripts
+		-- Los jugadores que ya entraron (por ejemplo al probar en Studio) lo reciben en su PlayerGui.
+		for _, jugador in Players:GetPlayers() do
+			local gui = jugador:FindFirstChildOfClass("PlayerGui")
+			if gui then
+				animador:Clone().Parent = gui
+			end
+		end
+	end
+end
+
+local Registro = require(modulos.Registro)
+local Rig = require(modulos.Rig)
+local IA = require(modulos.IA)
+local Interfaz = require(modulos.Interfaz)
+local Efectos = require(modulos.Efectos)
+local Eventos = require(modulos.Eventos)
+local Habilidades = require(modulos.Habilidades)
+
+Registro.cargarConfigs(compartido:WaitForChild("Configs"))
+Registro.buscarPlantillas()
+
+local activar
+
+local function morir(criatura)
+	if not criatura.vivo then
+		return
+	end
+	criatura.vivo = false
+	local modelo = criatura.modelo
+	-- Al morir el Humanoid deja de sostenerla: se ancla para que no atraviese el piso mientras cae.
+	criatura.raiz.Anchored = true
+	modelo:SetAttribute("Estado", "Derrotado")
+	Interfaz.visible(criatura, false)
+	Eventos.CriaturaDerrotada:Fire(modelo, criatura.tipo, modelo:GetAttribute("UltimoAtacante"))
+	local color = criatura.config.colorUI or Color3.new(1, 1, 1)
+	local espera = if criatura.explotado then 0 else Habilidades.duracionClip(criatura, "Derrota") + 1.2
+	task.delay(espera, function()
+		if criatura.raiz.Parent then
+			Efectos.poof(criatura.raiz.Position, color, criatura.alto)
+		end
+		Registro.quitar(modelo)
+		modelo:Destroy()
+	end)
+	local segundos = criatura.config.reaparecer or 0
+	if segundos > 0 and not criatura.invocado then
+		local plantilla = Registro.plantilla(criatura.tipo)
+		if plantilla then
+			task.delay(espera + segundos, function()
+				local nuevo = plantilla:Clone()
+				for nombre, valor in criatura.atributosIniciales do
+					nuevo:SetAttribute(nombre, valor)
+				end
+				nuevo:PivotTo(criatura.pivoteInicial)
+				nuevo.Parent = criatura.padreInicial and criatura.padreInicial.Parent and criatura.padreInicial or workspace
+				activar(nuevo)
+				Efectos.poof(criatura.pivoteInicial.Position, color, criatura.alto)
+			end)
+		end
+	end
+end
+
+activar = function(modelo: Instance)
+	if not modelo:IsA("Model") or Registro.de(modelo) or not modelo:IsDescendantOf(workspace) then
+		return
+	end
+	if modelo:FindFirstChild("HumanoidRootPart") then
+		return
+	end
+	-- Ignora modelos dentro de otra criatura (el importador a veces anida modelos).
+	local ancestro = modelo:FindFirstAncestorOfClass("Model")
+	while ancestro do
+		if Registro.de(ancestro) or Registro.tipoDe(ancestro) then
+			return
+		end
+		ancestro = ancestro:FindFirstAncestorOfClass("Model")
+	end
+	local tipo = Registro.tipoDe(modelo)
+	if not tipo then
+		return
+	end
+	local config = Registro.configs[tipo]
+	local atributosIniciales = modelo:GetAttributes()
+	local pivoteInicial = modelo:GetPivot()
+	local padreInicial = modelo.Parent
+	Registro.guardarPlantilla(tipo, modelo)
+
+	local armado = Rig.armar(modelo, tipo, config)
+	if not armado then
+		return
+	end
+	local modo = modelo:GetAttribute("Modo") or "Guardian"
+	local criatura = {
+		modelo = modelo,
+		tipo = tipo,
+		config = config,
+		raiz = armado.raiz,
+		cuerpo = armado.cuerpo,
+		humanoid = armado.humanoid,
+		escala = armado.escala,
+		alto = armado.alto,
+		partes = armado.partes,
+		casa = armado.raiz.CFrame,
+		modo = "Guardian",
+		vivo = true,
+		ocupado = false,
+		disfrazado = false,
+		regresando = false,
+		objetivo = nil,
+		cooldowns = {},
+		invocados = {},
+		invocado = modelo:GetAttribute("Invocado") == true,
+		invocador = nil,
+		contadorAccion = 0,
+		siguientePatrulla = 0,
+		ultimoCombate = 0,
+		velocidadBase = config.velocidad or 16,
+		atributosIniciales = atributosIniciales,
+		pivoteInicial = pivoteInicial,
+		padreInicial = padreInicial,
+	}
+	Registro.agregar(criatura)
+	Interfaz.crear(criatura)
+	IA.cambiarModo(criatura, modo)
+	if config.comportamiento == "emboscada" and criatura.modo == "Guardian" then
+		IA.disfrazar(criatura, true)
+	end
+	criatura.humanoid.Died:Connect(function()
+		morir(criatura)
+	end)
+	modelo.AncestryChanged:Connect(function()
+		if not modelo:IsDescendantOf(workspace) then
+			criatura.vivo = false
+			Registro.quitar(modelo)
+		end
+	end)
+	if criatura.invocado then
+		-- Las criaturas invocadas desaparecen solas despues de un rato.
+		task.delay(45, function()
+			if criatura.vivo then
+				criatura.humanoid.Health = 0
+			end
+		end)
+	end
+	IA.iniciar(criatura)
+	Eventos.CriaturaAparecio:Fire(modelo, tipo)
+end
+Registro.activar = activar
+
+for _, d in workspace:GetDescendants() do
+	if d:IsA("Model") then
+		activar(d)
+	end
+end
+workspace.DescendantAdded:Connect(function(d)
+	if d:IsA("Model") then
+		task.defer(activar, d)
+	end
+end)
+
+local cuantas = 0
+for _ in Registro.criaturas do
+	cuantas += 1
+end
+local tipos = {}
+for tipo in Registro.configs do
+	table.insert(tipos, tipo)
+end
+table.sort(tipos)
+print(`[Criaturas] Sistema listo: {cuantas} criaturas en el mapa. Tipos: {table.concat(tipos, ", ")}`)
+]]></ProtectedString>
+      </Properties>
+    </Item>
+    <Item class="ModuleScript" referent="2">
+      <Properties>
+        <string name="Name">API</string>
+        <ProtectedString name="Source"><![CDATA[--[[
+	API del sistema de criaturas para usar desde tus propios scripts del servidor:
+
+	  local Criaturas = require(game.ServerScriptService.SistemaCriaturas.API)
+	  local gallo = Criaturas.aparecer("GalloSamurai", CFrame.new(0, 5, 0), { Modo = "Pelea", Equipo = "Rojo" })
+	  Criaturas.cambiarModo(gallo, "Mascota")
+	  gallo:SetAttribute("Dueno", jugador.Name)
+
+	Para "aparecer" necesitas el modelo de esa criatura en ServerStorage (o una en el mapa).
+]]
+
+local Registro = require(script.Parent.Modulos.Registro)
+
+local API = {}
+
+-- Hace aparecer una criatura nueva. atributos es opcional (Modo, Equipo, Dueno...).
+function API.aparecer(tipo: string, donde: CFrame, atributos: { [string]: any }?, padre: Instance?): Model?
+	local plantilla = Registro.plantilla(tipo)
+	if not plantilla then
+		warn(`[Criaturas] No hay plantilla para "{tipo}". Pon el modelo en ServerStorage o en el mapa.`)
+		return nil
+	end
+	local nuevo = plantilla:Clone()
+	for nombre, valor in atributos or {} do
+		nuevo:SetAttribute(nombre, valor)
+	end
+	nuevo:PivotTo(donde)
+	nuevo.Parent = padre or workspace
+	if Registro.activar then
+		Registro.activar(nuevo)
+	end
+	return nuevo
+end
+
+function API.cambiarModo(modelo: Model, modo: string)
+	modelo:SetAttribute("Modo", modo)
+end
+
+-- Devuelve todas las criaturas vivas (modelos), opcionalmente de un tipo.
+function API.lista(tipo: string?): { Model }
+	local lista = {}
+	for modelo, criatura in Registro.criaturas do
+		if criatura.vivo and (tipo == nil or criatura.tipo == tipo) then
+			table.insert(lista, modelo)
+		end
+	end
+	return lista
+end
+
+return API
+]]></ProtectedString>
+      </Properties>
+    </Item>
+    <Item class="LocalScript" referent="3">
+      <Properties>
+        <string name="Name">AnimadorCliente</string>
+        <ProtectedString name="Source"><![CDATA[--[[
+	ANIMADOR DE CRIATURAS (cliente)
+	Mueve las articulaciones (Motor6D.Transform) de cada criatura cerca de la camara, en cada cuadro.
+	Es suave y no gasta red: el servidor solo avisa que accion hacer con atributos del modelo:
+	  "Accion" = "NombreDelClip#numero", "Estado" = "Vivo"/"Derrotado", "Disfrazado", "Golpe".
+]]
+
+local CollectionService = game:GetService("CollectionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local compartido = ReplicatedStorage:WaitForChild("SistemaCriaturasCompartido")
+local Animacion = require(compartido:WaitForChild("Animacion"))
+local carpetaConfigs = compartido:WaitForChild("Configs")
+
+local DISTANCIA_MAXIMA = 220
+
+local configs = {}
+local activas = {}
+
+local function configDe(tipo: string?)
+	if not tipo then
+		return nil
+	end
+	if configs[tipo] == nil then
+		local modulo = carpetaConfigs:FindFirstChild(tipo)
+		local ok, config = false, nil
+		if modulo then
+			ok, config = pcall(require, modulo)
+		end
+		configs[tipo] = if ok then config else false
+	end
+	return configs[tipo] or nil
+end
+
+local function buscarMotores(estado)
+	local modelo = estado.modelo
+	local motores = {}
+	local function motorDe(nombreParte: string)
+		local parte = modelo:FindFirstChild(nombreParte, true)
+		local m = parte and parte:FindFirstChild("Articulacion")
+		if m and m:IsA("Motor6D") then
+			return m
+		end
+		return nil
+	end
+	motores.Raiz = motorDe("Cuerpo")
+	for nombre in estado.config.rig.partes do
+		motores[nombre] = motorDe(nombre)
+	end
+	estado.motores = motores
+	estado.raiz = modelo:FindFirstChild("HumanoidRootPart")
+	estado.humanoid = modelo:FindFirstChildOfClass("Humanoid")
+	estado.ultimaBusqueda = os.clock()
+end
+
+local function iniciarClip(estado, nombre: string?, ranura: string)
+	local clips = estado.config.animaciones.clips
+	local clip = nombre and clips[nombre]
+	if clip then
+		estado[ranura] = { clip = clip, t = 0, nombre = nombre }
+	end
+end
+
+local function registrar(modelo: Instance)
+	if activas[modelo] or not modelo:IsA("Model") then
+		return
+	end
+	local config = configDe(modelo:GetAttribute("Tipo"))
+	if not config then
+		return
+	end
+	local estado = {
+		modelo = modelo,
+		config = config,
+		t = math.random() * 10, -- para que no se muevan todas igual
+		pesoCaminar = 0,
+		pesoVida = 1,
+		principal = nil,
+		golpe = nil,
+		conexiones = {},
+	}
+	buscarMotores(estado)
+	table.insert(estado.conexiones, modelo:GetAttributeChangedSignal("Accion"):Connect(function()
+		local accion = modelo:GetAttribute("Accion")
+		if type(accion) == "string" then
+			iniciarClip(estado, string.match(accion, "^(.-)#") or accion, "principal")
+		end
+	end))
+	table.insert(estado.conexiones, modelo:GetAttributeChangedSignal("Golpe"):Connect(function()
+		if not (estado.principal and estado.principal.clip) then
+			iniciarClip(estado, "Golpeado", "golpe")
+		end
+	end))
+	table.insert(estado.conexiones, modelo:GetAttributeChangedSignal("Estado"):Connect(function()
+		if modelo:GetAttribute("Estado") == "Derrotado" then
+			iniciarClip(estado, "Derrota", "principal")
+		end
+	end))
+	if modelo:GetAttribute("Estado") == "Derrotado" then
+		iniciarClip(estado, "Derrota", "principal")
+	end
+	activas[modelo] = estado
+end
+
+local function quitar(modelo: Instance)
+	local estado = activas[modelo]
+	if estado then
+		for _, c in estado.conexiones do
+			c:Disconnect()
+		end
+		activas[modelo] = nil
+	end
+end
+
+for _, modelo in CollectionService:GetTagged("Criatura") do
+	task.spawn(registrar, modelo)
+end
+CollectionService:GetInstanceAddedSignal("Criatura"):Connect(registrar)
+CollectionService:GetInstanceRemovedSignal("Criatura"):Connect(quitar)
+
+local function avanzarClip(ranura, dt: number, pose, mantener: boolean)
+	if not ranura then
+		return nil
+	end
+	ranura.t += dt
+	Animacion.evaluarClip(ranura.clip, math.min(ranura.t, ranura.clip.duracion), pose, 1)
+	if ranura.t >= ranura.clip.duracion and not mantener then
+		return nil
+	end
+	return ranura
+end
+
+local evento = RunService.PreSimulation or RunService.Stepped
+evento:Connect(function(a, b)
+	local dt = if typeof(a) == "number" and typeof(b) == "number" then b else a
+	local camara = workspace.CurrentCamera
+	local posCamara = camara and camara.CFrame.Position
+	for modelo, estado in activas do
+		if not modelo.Parent then
+			quitar(modelo)
+			continue
+		end
+		-- Con StreamingEnabled las partes pueden llegar tarde: se vuelven a buscar cada segundo.
+		if (not estado.raiz or not estado.motores.Raiz) and os.clock() - estado.ultimaBusqueda > 1 then
+			buscarMotores(estado)
+		end
+		local raiz = estado.raiz
+		if not raiz or not raiz.Parent then
+			continue
+		end
+		if posCamara and (raiz.Position - posCamara).Magnitude > DISTANCIA_MAXIMA then
+			continue
+		end
+
+		local derrotado = modelo:GetAttribute("Estado") == "Derrotado"
+		local ciclos = estado.config.animaciones.ciclos
+		estado.t += dt
+		local velocidad = raiz.AssemblyLinearVelocity
+		local plana = Vector3.new(velocidad.X, 0, velocidad.Z).Magnitude
+		local caminar = if derrotado then 0 else math.clamp(plana / 6, 0, 1)
+		estado.pesoCaminar += (caminar - estado.pesoCaminar) * math.min(1, dt * 8)
+		estado.pesoVida += ((if derrotado then 0 else 1) - estado.pesoVida) * math.min(1, dt * 6)
+
+		local pose = {}
+		local reposo = if modelo:GetAttribute("Disfrazado") and ciclos.Disfrazado then ciclos.Disfrazado else ciclos.Idle
+		Animacion.evaluarCiclo(reposo, estado.t, pose, (1 - estado.pesoCaminar) * estado.pesoVida)
+		Animacion.evaluarCiclo(ciclos.Caminar, estado.t, pose, estado.pesoCaminar * estado.pesoVida)
+		estado.principal = avanzarClip(estado.principal, dt, pose, derrotado)
+		estado.golpe = avanzarClip(estado.golpe, dt, pose, false)
+
+		local escala = modelo:GetAttribute("Escala") or 1
+		for nombre, motor in estado.motores do
+			local canales = pose[nombre]
+			motor.Transform = if canales then Animacion.aCFrame(canales, escala) else CFrame.identity
+		end
+	end
+end)
+]]></ProtectedString>
+      </Properties>
+    </Item>
+    <Item class="Folder" referent="4">
+      <Properties>
+        <string name="Name">Modulos</string>
+      </Properties>
+      <Item class="ModuleScript" referent="5">
+        <Properties>
+          <string name="Name">Efectos</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Efectos visuales y sonidos de las habilidades. Todo se crea en workspace.EfectosCriaturas y se borra solo.
+	Puedes cambiar los sonidos por los tuyos (rbxassetid://...).
+]]
+
+local Debris = game:GetService("Debris")
+local TweenService = game:GetService("TweenService")
+
+local Efectos = {}
+
+Efectos.sonidos = {
+	golpe = "rbxasset://sounds/swordslash.wav",
+	onda = "rbxasset://sounds/collide.wav",
+	rayo = "rbxasset://sounds/electronicpingshort.wav",
+	disparo = "rbxasset://sounds/Rocket shot.wav",
+	aparecer = "rbxasset://sounds/unsheath.wav",
+	escudo = "rbxasset://sounds/unsheath.wav",
+	embestida = "rbxasset://sounds/swoosh.wav",
+}
+
+local function carpeta(): Folder
+	local f = workspace:FindFirstChild("EfectosCriaturas")
+	if not f then
+		f = Instance.new("Folder")
+		f.Name = "EfectosCriaturas"
+		f.Parent = workspace
+	end
+	return f :: Folder
+end
+
+-- Parte decorativa: anclada, sin colisiones y sin afectar raycasts.
+function Efectos.parte(props): BasePart
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.CastShadow = false
+	p.Material = Enum.Material.Neon
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	-- La forma va primero (cambia el tamano), luego el tamano y al final la posicion.
+	for _, k in { "Shape", "Size", "CFrame", "Position" } do
+		if props[k] ~= nil then
+			(p :: any)[k] = props[k]
+		end
+	end
+	for k, v in props do
+		if k ~= "Shape" and k ~= "Size" and k ~= "CFrame" and k ~= "Position" then
+			(p :: any)[k] = v
+		end
+	end
+	p.Parent = carpeta()
+	return p
+end
+
+function Efectos.desvanecer(parte: BasePart, duracion: number, extra)
+	local metas = { Transparency = 1 }
+	if extra then
+		for k, v in extra do
+			metas[k] = v
+		end
+	end
+	TweenService:Create(parte, TweenInfo.new(duracion, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), metas):Play()
+	Debris:AddItem(parte, duracion + 0.1)
+end
+
+function Efectos.sonido(nombre: string, donde: Instance | Vector3, volumen: number?)
+	local id = Efectos.sonidos[nombre]
+	if not id then
+		return
+	end
+	local padre: Instance
+	if typeof(donde) == "Vector3" then
+		local ancla = Efectos.parte({ Transparency = 1, Size = Vector3.one, Position = donde })
+		Debris:AddItem(ancla, 3)
+		padre = ancla
+	else
+		padre = donde
+	end
+	local s = Instance.new("Sound")
+	s.SoundId = id
+	s.Volume = volumen or 0.6
+	s.RollOffMaxDistance = 120
+	s.Parent = padre
+	s:Play()
+	Debris:AddItem(s, 3)
+end
+
+-- Anillo que crece en el piso (ondas expansivas).
+function Efectos.anillo(centro: Vector3, radio: number, color: Color3, duracion: number?)
+	local d = duracion or 0.45
+	local anillo = Efectos.parte({
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.3, 1, 1),
+		CFrame = CFrame.new(centro) * CFrame.Angles(0, 0, math.rad(90)),
+		Color = color,
+		Transparency = 0.25,
+	})
+	Efectos.desvanecer(anillo, d, { Size = Vector3.new(0.3, radio * 2, radio * 2) })
+	local esfera = Efectos.parte({
+		Shape = Enum.PartType.Ball,
+		Size = Vector3.one * 2,
+		Position = centro + Vector3.new(0, 1, 0),
+		Color = color,
+		Transparency = 0.5,
+		Material = Enum.Material.ForceField,
+	})
+	Efectos.desvanecer(esfera, d * 0.8, { Size = Vector3.one * radio * 1.6 })
+end
+
+-- Arco de corte al frente (golpes).
+function Efectos.arco(origen: CFrame, alcance: number, angulo: number, color: Color3)
+	local pasos = 7
+	for i = 0, pasos - 1 do
+		local a = math.rad(-angulo / 2 + angulo * i / (pasos - 1))
+		local cf = origen * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, -alcance * 0.7)
+		local trozo = Efectos.parte({
+			Size = Vector3.new(alcance * 0.35, 0.25, 0.25),
+			CFrame = cf * CFrame.Angles(0, math.rad(90), 0),
+			Color = color,
+			Transparency = 0.15,
+		})
+		task.delay(i * 0.015, function()
+			Efectos.desvanecer(trozo, 0.25, { Size = Vector3.new(alcance * 0.5, 0.05, 0.05) })
+		end)
+	end
+end
+
+-- Rayo en zigzag entre dos puntos.
+function Efectos.rayo(desde: Vector3, hasta: Vector3, color: Color3)
+	local segmentos = 7
+	local puntos = { desde }
+	local dir = hasta - desde
+	local largo = dir.Magnitude
+	for i = 1, segmentos - 1 do
+		local base = desde + dir * (i / segmentos)
+		local desvio = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * math.min(largo * 0.15, 3)
+		table.insert(puntos, base + desvio)
+	end
+	table.insert(puntos, hasta)
+	for i = 1, #puntos - 1 do
+		local a, b = puntos[i], puntos[i + 1]
+		local seg = Efectos.parte({
+			Size = Vector3.new(0.25, 0.25, (b - a).Magnitude),
+			CFrame = CFrame.lookAt((a + b) / 2, b),
+			Color = color,
+		})
+		Efectos.desvanecer(seg, 0.3)
+	end
+	local destello = Efectos.parte({
+		Shape = Enum.PartType.Ball,
+		Size = Vector3.one * 1.5,
+		Position = hasta,
+		Color = color,
+	})
+	Efectos.desvanecer(destello, 0.3, { Size = Vector3.one * 4 })
+end
+
+-- Nube de humo/chispas (aparecer, desaparecer, teletransporte).
+function Efectos.poof(posicion: Vector3, color: Color3, tamano: number?)
+	local t = tamano or 4
+	for _ = 1, 8 do
+		local bola = Efectos.parte({
+			Shape = Enum.PartType.Ball,
+			Size = Vector3.one * (t * 0.35),
+			Position = posicion + Vector3.new(math.random() - 0.5, math.random() * 0.6, math.random() - 0.5) * t,
+			Color = color,
+			Material = Enum.Material.SmoothPlastic,
+			Transparency = 0.2,
+		})
+		local destino = bola.Position + Vector3.new(math.random() - 0.5, math.random(), math.random() - 0.5) * t
+		Efectos.desvanecer(bola, 0.6, { Size = Vector3.one * t * 0.7, Position = destino })
+	end
+end
+
+-- Explosion visual (el dano lo aplica la habilidad).
+function Efectos.explosion(posicion: Vector3, radio: number, color: Color3)
+	local e = Instance.new("Explosion")
+	e.Position = posicion
+	e.BlastRadius = radio
+	e.BlastPressure = 0
+	e.ExplosionType = Enum.ExplosionType.NoCraters
+	e.DestroyJointRadiusPercent = 0
+	e.Parent = carpeta()
+	local bola = Efectos.parte({ Shape = Enum.PartType.Ball, Size = Vector3.one * 2, Position = posicion, Color = color })
+	Efectos.desvanecer(bola, 0.4, { Size = Vector3.one * radio * 2 })
+	Efectos.anillo(posicion - Vector3.new(0, 1, 0), radio, color, 0.4)
+end
+
+-- Estela detras de la criatura (embestidas). Devuelve una funcion para quitarla.
+function Efectos.estela(raiz: BasePart, alto: number, color: Color3): () -> ()
+	local a0 = Instance.new("Attachment")
+	a0.Position = Vector3.new(0, alto * 0.3, 0)
+	a0.Parent = raiz
+	local a1 = Instance.new("Attachment")
+	a1.Position = Vector3.new(0, -alto * 0.3, 0)
+	a1.Parent = raiz
+	local estela = Instance.new("Trail")
+	estela.Attachment0, estela.Attachment1 = a0, a1
+	estela.Color = ColorSequence.new(color)
+	estela.LightEmission = 1
+	estela.Lifetime = 0.35
+	estela.Transparency = NumberSequence.new(0.2, 1)
+	estela.Parent = raiz
+	return function()
+		task.delay(0.4, function()
+			estela:Destroy()
+			a0:Destroy()
+			a1:Destroy()
+		end)
+	end
+end
+
+-- Burbuja de escudo pegada a la criatura. Devuelve una funcion para quitarla.
+function Efectos.escudo(raiz: BasePart, tamano: number, color: Color3): () -> ()
+	local burbuja = Instance.new("Part")
+	burbuja.Name = "EscudoCriatura"
+	burbuja.Shape = Enum.PartType.Ball
+	burbuja.Size = Vector3.one * tamano
+	burbuja.Material = Enum.Material.ForceField
+	burbuja.Color = color
+	burbuja.CanCollide = false
+	burbuja.CanQuery = false
+	burbuja.CanTouch = false
+	burbuja.Massless = true
+	burbuja.CastShadow = false
+	burbuja.CFrame = raiz.CFrame
+	local soldadura = Instance.new("WeldConstraint")
+	soldadura.Part0, soldadura.Part1 = raiz, burbuja
+	soldadura.Parent = burbuja
+	burbuja.Parent = raiz
+	return function()
+		Efectos.desvanecer(burbuja, 0.3)
+	end
+end
+
+-- Texto flotante con el nombre de la habilidad.
+function Efectos.texto(adorno: BasePart, texto: string, color: Color3, altura: number)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "TextoHabilidad"
+	gui.Size = UDim2.fromOffset(240, 40)
+	gui.StudsOffset = Vector3.new(0, altura, 0)
+	gui.AlwaysOnTop = true
+	gui.MaxDistance = 90
+	gui.Adornee = adorno
+	local etiqueta = Instance.new("TextLabel")
+	etiqueta.Size = UDim2.fromScale(1, 1)
+	etiqueta.BackgroundTransparency = 1
+	etiqueta.Text = texto
+	etiqueta.TextColor3 = color
+	etiqueta.TextStrokeTransparency = 0
+	etiqueta.TextScaled = true
+	etiqueta.Font = Enum.Font.FredokaOne
+	etiqueta.Parent = gui
+	gui.Parent = adorno
+	TweenService:Create(gui, TweenInfo.new(1.2), { StudsOffset = Vector3.new(0, altura + 2, 0) }):Play()
+	TweenService:Create(etiqueta, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+	}):Play()
+	Debris:AddItem(gui, 1.3)
+end
+
+-- Proyectil visual segun la forma.
+function Efectos.proyectil(forma: string, color: Color3, tamano: number): BasePart
+	local p: BasePart
+	if forma == "pluma" then
+		p = Efectos.parte({ Size = Vector3.new(0.2, 0.5, 1.6) * tamano, Color = color })
+	elseif forma == "hueso" then
+		p = Efectos.parte({
+			Shape = Enum.PartType.Cylinder,
+			Size = Vector3.new(1.6, 0.35, 0.35) * tamano,
+			Color = Color3.fromRGB(240, 232, 210),
+			Material = Enum.Material.SmoothPlastic,
+		})
+		local brillo = Instance.new("PointLight")
+		brillo.Color = color
+		brillo.Range = 6
+		brillo.Parent = p
+	elseif forma == "rayo" then
+		p = Efectos.parte({ Size = Vector3.new(0.3, 0.3, 2.4) * tamano, Color = color })
+	elseif forma == "cristal" then
+		p = Efectos.parte({ Size = Vector3.new(0.7, 0.7, 1.4) * tamano, Color = color, Material = Enum.Material.Glass, Transparency = 0.2 })
+	else
+		p = Efectos.parte({ Shape = Enum.PartType.Ball, Size = Vector3.one * 1.2 * tamano, Color = color })
+	end
+	local luz = Instance.new("PointLight")
+	luz.Color = color
+	luz.Brightness = 2
+	luz.Range = 8
+	luz.Parent = p
+	return p
+end
+
+return Efectos
+]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="6">
+        <Properties>
+          <string name="Name">Eventos</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Eventos para conectar el sistema con el resto de tu juego (desde cualquier Script del servidor):
+
+	  local eventos = game.ServerStorage:WaitForChild("EventosCriaturas")
+	  eventos.CriaturaDerrotada.Event:Connect(function(modelo, tipo, ultimoAtacante)
+	      print(tipo, "fue derrotada")   -- por ejemplo, dar monedas o un huevo especial
+	  end)
+	  eventos.CriaturaAparecio.Event:Connect(function(modelo, tipo) end)
+]]
+
+local ServerStorage = game:GetService("ServerStorage")
+
+local carpeta = ServerStorage:FindFirstChild("EventosCriaturas")
+if not carpeta then
+	carpeta = Instance.new("Folder")
+	carpeta.Name = "EventosCriaturas"
+	carpeta.Parent = ServerStorage
+end
+
+local function evento(nombre: string): BindableEvent
+	local e = carpeta:FindFirstChild(nombre)
+	if not e then
+		e = Instance.new("BindableEvent")
+		e.Name = nombre
+		e.Parent = carpeta
+	end
+	return e :: BindableEvent
+end
+
+return {
+	CriaturaDerrotada = evento("CriaturaDerrotada"),
+	CriaturaAparecio = evento("CriaturaAparecio"),
+}
+]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="7">
+        <Properties>
+          <string name="Name">Habilidades</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Habilidades: los 10 tipos que pueden usar las criaturas (Golpe, Embestida, Onda, Proyectil, Cadena,
+	Escudo, Fantasma, Teletransporte, Invocar, Explotar). Los valores vienen de la configuracion de cada criatura.
+]]
+
+local RunService = game:GetService("RunService")
+
+local Efectos = require(script.Parent.Efectos)
+local Objetivos = require(script.Parent.Objetivos)
+local Registro = require(script.Parent.Registro)
+
+local Habilidades = {}
+
+local BLANCO = Color3.new(1, 1, 1)
+
+local function colorDe(hab, criatura): Color3
+	return hab.color or criatura.config.colorUI or BLANCO
+end
+
+local function plano(v: Vector3): Vector3
+	local p = Vector3.new(v.X, 0, v.Z)
+	return if p.Magnitude > 1e-3 then p.Unit else Vector3.new(0, 0, -1)
+end
+
+-- Gira la criatura hacia una posicion (solo en horizontal).
+function Habilidades.mirarA(criatura, posicion: Vector3)
+	local r = criatura.raiz
+	local destino = Vector3.new(posicion.X, r.Position.Y, posicion.Z)
+	if (destino - r.Position).Magnitude > 0.1 then
+		r.CFrame = CFrame.lookAt(r.Position, destino)
+	end
+end
+
+-- Punto desde donde salen proyectiles y rayos (la cabeza si existe).
+local function boca(criatura): Vector3
+	local cabeza = criatura.partes.Cabeza
+	if cabeza then
+		return cabeza.Position + criatura.raiz.CFrame.LookVector * (criatura.alto * 0.1)
+	end
+	return criatura.raiz.Position + criatura.raiz.CFrame.LookVector * criatura.alto * 0.3
+end
+
+-- Golpe: cono al frente.
+local function golpe(criatura, hab)
+	local esc = criatura.escala
+	local alcance = (hab.alcance or 6) * esc
+	local angulo = hab.angulo or 100
+	local r = criatura.raiz
+	local base = CFrame.lookAt(r.Position, r.Position + r.CFrame.LookVector)
+	Efectos.arco(base, alcance, angulo, colorDe(hab, criatura))
+	Efectos.sonido("golpe", r)
+	local coseno = math.cos(math.rad(angulo / 2))
+	for _, e in Objetivos.enRadio(criatura, r.Position, alcance + 1.5) do
+		local hacia = e.raiz.Position - r.Position
+		if plano(hacia):Dot(plano(r.CFrame.LookVector)) >= coseno or Objetivos.distanciaPlana(e.raiz.Position, r.Position) < 2.5 then
+			Objetivos.danar(criatura, e, hab.danio or 10)
+			Objetivos.empujar(e, hacia, hab.empuje or 25)
+			Objetivos.aturdir(e, hab.aturdir or 0)
+		end
+	end
+end
+
+-- Embestida: corre en linea recta golpeando a todo lo que toca.
+local function embestida(criatura, hab, objetivo)
+	local esc = criatura.escala
+	local r = criatura.raiz
+	local direccion = plano((if objetivo then objetivo.raiz.Position else r.Position + r.CFrame.LookVector) - r.Position)
+	Habilidades.mirarA(criatura, r.Position + direccion)
+	local velocidad = (hab.velocidad or 70) * esc
+	local duracion = ((hab.distancia or 20) * esc) / velocidad
+	local ancho = (hab.ancho or 4) * esc
+	local color = colorDe(hab, criatura)
+	local quitarEstela = Efectos.estela(r, criatura.alto, color)
+	Efectos.sonido("embestida", r)
+	local adjunto = Instance.new("Attachment")
+	adjunto.Parent = r
+	local lv = Instance.new("LinearVelocity")
+	lv.Attachment0 = adjunto
+	lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane
+	lv.PrimaryTangentAxis = Vector3.xAxis
+	lv.SecondaryTangentAxis = Vector3.zAxis
+	lv.PlaneVelocity = Vector2.new(direccion.X, direccion.Z) * velocidad
+	lv.MaxForce = 1e6
+	lv.RelativeTo = Enum.ActuatorRelativeTo.World
+	lv.Parent = adjunto
+	local golpeados = {}
+	local inicio = os.clock()
+	while os.clock() - inicio < duracion and criatura.vivo do
+		for _, e in Objetivos.enRadio(criatura, r.Position, ancho) do
+			if not golpeados[e.modelo] then
+				golpeados[e.modelo] = true
+				Objetivos.danar(criatura, e, hab.danio or 15)
+				Objetivos.empujar(e, e.raiz.Position - r.Position + direccion * 2, hab.empuje or 40)
+				Efectos.poof(e.raiz.Position, color, 2)
+			end
+		end
+		RunService.Heartbeat:Wait()
+	end
+	adjunto:Destroy()
+	r.AssemblyLinearVelocity = Vector3.zero
+	quitarEstela()
+end
+
+-- Onda: golpe en area alrededor de la criatura.
+local function onda(criatura, hab)
+	local esc = criatura.escala
+	local radio = (hab.radio or 10) * esc
+	local r = criatura.raiz
+	local piso = r.Position - Vector3.new(0, criatura.alto * 0.5 - 0.2, 0)
+	Efectos.anillo(piso, radio, colorDe(hab, criatura))
+	Efectos.sonido("onda", r, 0.8)
+	for _, e in Objetivos.enRadio(criatura, r.Position, radio) do
+		Objetivos.danar(criatura, e, hab.danio or 15)
+		Objetivos.empujar(e, e.raiz.Position - r.Position, hab.empuje or 40)
+		Objetivos.aturdir(e, hab.aturdir or 0)
+	end
+end
+
+-- Proyectil: uno o varios disparos hacia el objetivo.
+local function proyectil(criatura, hab, objetivo)
+	local esc = criatura.escala
+	local cantidad = hab.cantidad or 1
+	local dispersion = hab.dispersion or 0
+	local velocidad = (hab.velocidad or 60) * esc
+	local tamano = (hab.tamano or 1) * esc
+	local alcanceMax = (hab.alcanceMax or (hab.rango or 30) * 1.6) * esc
+	local radioExplosion = (hab.radioExplosion or 0) * esc
+	local color = colorDe(hab, criatura)
+	local origen = boca(criatura)
+	local destino = if objetivo then objetivo.raiz.Position else origen + criatura.raiz.CFrame.LookVector * 20
+	local base = (destino - origen)
+	base = if base.Magnitude > 1e-3 then base.Unit else criatura.raiz.CFrame.LookVector
+	Efectos.sonido("disparo", criatura.raiz, 0.5)
+
+	local parametros = RaycastParams.new()
+	parametros.FilterType = Enum.RaycastFilterType.Exclude
+	parametros.FilterDescendantsInstances = { criatura.modelo, workspace:FindFirstChild("EfectosCriaturas") }
+
+	for i = 1, cantidad do
+		local angulo = if cantidad > 1 then -dispersion / 2 + dispersion * (i - 1) / (cantidad - 1) else 0
+		local dir = (CFrame.fromAxisAngle(Vector3.yAxis, math.rad(angulo)) * base)
+		local bala = Efectos.proyectil(hab.forma or "bola", color, tamano)
+		local pos = origen
+		bala.CFrame = CFrame.lookAt(pos, pos + dir)
+		task.spawn(function()
+			local recorrido = 0
+			local giro = 0
+			while recorrido < alcanceMax and bala.Parent do
+				local dt = RunService.Heartbeat:Wait()
+				local paso = dir * velocidad * dt
+				local impacto = workspace:Raycast(pos, paso, parametros)
+				local siguiente = if impacto then impacto.Position else pos + paso
+				giro += dt * 12
+				bala.CFrame = CFrame.lookAt(siguiente, siguiente + dir) * (if hab.forma == "hueso" then CFrame.Angles(0, 0, giro) else CFrame.identity)
+				recorrido += (siguiente - pos).Magnitude
+				pos = siguiente
+				local tocado = nil
+				for _, e in Objetivos.validos(criatura) do
+					if (e.raiz.Position - pos).Magnitude < 2.5 * tamano + 1 then
+						tocado = e
+						break
+					end
+				end
+				if tocado or impacto then
+					if radioExplosion > 0 then
+						Efectos.explosion(pos, radioExplosion, color)
+						for _, e in Objetivos.enRadio(criatura, pos, radioExplosion) do
+							Objetivos.danar(criatura, e, hab.danio or 10)
+							Objetivos.empujar(e, e.raiz.Position - pos, hab.empuje or 30)
+						end
+					elseif tocado then
+						Objetivos.danar(criatura, tocado, hab.danio or 10)
+						Objetivos.empujar(tocado, dir, hab.empuje or 15)
+						Efectos.poof(pos, color, 1.5)
+					else
+						Efectos.poof(pos, color, 1)
+					end
+					break
+				end
+			end
+			bala:Destroy()
+		end)
+		task.wait(0.06)
+	end
+end
+
+-- Cadena: rayo que salta entre enemigos.
+local function cadena(criatura, hab, objetivo)
+	local esc = criatura.escala
+	local color = colorDe(hab, criatura)
+	local radioSalto = (hab.radioSalto or 15) * esc
+	local danio = hab.danio or 15
+	local golpeados = {}
+	local desde = boca(criatura)
+	local actual = objetivo
+	Efectos.sonido("rayo", criatura.raiz, 0.8)
+	for _ = 0, (hab.saltos or 2) do
+		if not actual or not Objetivos.sigueValido(criatura, actual) then
+			break
+		end
+		golpeados[actual.modelo] = true
+		Efectos.rayo(desde, actual.raiz.Position, color)
+		Objetivos.danar(criatura, actual, danio)
+		Objetivos.aturdir(actual, 0.3)
+		desde = actual.raiz.Position
+		danio *= 0.8
+		local siguiente, mejor = nil, radioSalto
+		for _, e in Objetivos.validos(criatura) do
+			local d = (e.raiz.Position - desde).Magnitude
+			if not golpeados[e.modelo] and d <= mejor then
+				siguiente, mejor = e, d
+			end
+		end
+		actual = siguiente
+		task.wait(0.08)
+	end
+end
+
+-- Escudo: reduce el dano un tiempo (no bloquea a la criatura).
+local function escudo(criatura, hab)
+	local modelo = criatura.modelo
+	modelo:SetAttribute("Reduccion", hab.reduccion or 0.6)
+	Efectos.sonido("escudo", criatura.raiz)
+	local quitar = Efectos.escudo(criatura.raiz, criatura.alto * 1.25, colorDe(hab, criatura))
+	task.delay(hab.duracion or 3, function()
+		quitar()
+		if modelo.Parent then
+			modelo:SetAttribute("Reduccion", nil)
+		end
+	end)
+end
+
+-- Fantasma: transparente, intocable y mas rapida por un tiempo.
+local function fantasma(criatura, hab)
+	local modelo = criatura.modelo
+	local originales = {}
+	for _, d in modelo:GetDescendants() do
+		if d:IsA("BasePart") and d ~= criatura.raiz then
+			originales[d] = d.Transparency
+			d.Transparency = 0.5 + d.Transparency * 0.5
+		end
+	end
+	modelo:SetAttribute("Intocable", true)
+	local velocidadBase = criatura.velocidadBase
+	criatura.humanoid.WalkSpeed = velocidadBase * (hab.velocidadExtra or 1.5)
+	Efectos.poof(criatura.raiz.Position, colorDe(hab, criatura), criatura.alto)
+	task.delay(hab.duracion or 3, function()
+		for parte, t in originales do
+			if parte.Parent then
+				parte.Transparency = t
+			end
+		end
+		if modelo.Parent then
+			modelo:SetAttribute("Intocable", nil)
+			if criatura.vivo then
+				criatura.humanoid.WalkSpeed = velocidadBase
+				Efectos.poof(criatura.raiz.Position, colorDe(hab, criatura), criatura.alto)
+			end
+		end
+	end)
+end
+
+-- Teletransporte: aparece detras del objetivo y golpea alrededor.
+local function teletransporte(criatura, hab, objetivo)
+	if not objetivo then
+		return
+	end
+	local esc = criatura.escala
+	local color = colorDe(hab, criatura)
+	local r = criatura.raiz
+	Efectos.poof(r.Position, color, criatura.alto)
+	local atras = objetivo.raiz.CFrame.LookVector * -((hab.distanciaDetras or 4) * esc + criatura.alto * 0.3)
+	local destino = Vector3.new(objetivo.raiz.Position.X + atras.X, r.Position.Y, objetivo.raiz.Position.Z + atras.Z)
+	criatura.modelo:PivotTo(CFrame.lookAt(destino, Vector3.new(objetivo.raiz.Position.X, destino.Y, objetivo.raiz.Position.Z)))
+	Efectos.sonido("aparecer", r)
+	Efectos.poof(destino, color, criatura.alto)
+	local radio = (hab.radio or 8) * esc
+	Efectos.anillo(destino - Vector3.new(0, criatura.alto * 0.5 - 0.2, 0), radio, color)
+	for _, e in Objetivos.enRadio(criatura, destino, radio) do
+		Objetivos.danar(criatura, e, hab.danio or 10)
+		Objetivos.empujar(e, e.raiz.Position - destino, hab.empuje or 30)
+	end
+end
+
+-- Invocar: hace aparecer otras criaturas (necesita la plantilla en ServerStorage o en el mapa).
+local function invocar(criatura, hab)
+	local tipo = hab.criatura
+	local plantilla = tipo and Registro.plantilla(tipo)
+	if not plantilla then
+		warn(`[Criaturas] {criatura.tipo} quiere invocar "{tipo}" pero no hay ningun modelo {tipo} en el mapa ni en ServerStorage.`)
+		return
+	end
+	local vivos = 0
+	for modelo in criatura.invocados do
+		if modelo.Parent and Registro.de(modelo) and Registro.de(modelo).vivo then
+			vivos += 1
+		else
+			criatura.invocados[modelo] = nil
+		end
+	end
+	local cuantos = math.min(hab.cantidad or 1, (hab.maximo or 4) - vivos)
+	local r = criatura.raiz
+	for i = 1, cuantos do
+		local angulo = math.rad(-50 + 100 * (if cuantos > 1 then (i - 1) / (cuantos - 1) else 0.5))
+		local dir = CFrame.fromAxisAngle(Vector3.yAxis, angulo) * plano(r.CFrame.LookVector)
+		local posicion = r.Position + dir * (criatura.alto * 0.6 + 2)
+		local nuevo = plantilla:Clone()
+		nuevo:SetAttribute("Modo", criatura.modo)
+		nuevo:SetAttribute("Invocado", true)
+		local equipo = criatura.modelo:GetAttribute("Equipo")
+		if equipo then
+			nuevo:SetAttribute("Equipo", equipo)
+		end
+		local _, tamano = nuevo:GetBoundingBox()
+		local piso = r.Position.Y - criatura.alto * 0.5
+		nuevo:PivotTo(CFrame.lookAt(Vector3.new(posicion.X, piso + tamano.Y / 2, posicion.Z), Vector3.new(posicion.X, piso + tamano.Y / 2, posicion.Z) + dir))
+		criatura.invocados[nuevo] = true
+		nuevo:SetAttribute("Invocador", criatura.modelo.Name)
+		nuevo.Parent = criatura.modelo.Parent or workspace
+		Efectos.poof(posicion, colorDe(hab, criatura), 3)
+		if Registro.activar then
+			Registro.activar(nuevo)
+		end
+		local nueva = Registro.de(nuevo)
+		if nueva then
+			nueva.invocador = criatura
+		end
+	end
+end
+
+-- Explotar: dano en area y la criatura desaparece.
+local function explotar(criatura, hab)
+	local esc = criatura.escala
+	local radio = (hab.radio or 10) * esc
+	local centro = criatura.raiz.Position
+	Efectos.explosion(centro, radio, colorDe(hab, criatura))
+	for _, e in Objetivos.enRadio(criatura, centro, radio) do
+		local d = (e.raiz.Position - centro).Magnitude
+		local factor = 1 - 0.5 * math.clamp(d / radio, 0, 1)
+		Objetivos.danar(criatura, e, (hab.danio or 20) * factor)
+		Objetivos.empujar(e, e.raiz.Position - centro, (hab.empuje or 60) * factor)
+	end
+	criatura.explotado = true
+	criatura.humanoid.Health = 0
+end
+
+local TIPOS = {
+	Golpe = golpe,
+	Embestida = embestida,
+	Onda = onda,
+	Proyectil = proyectil,
+	Cadena = cadena,
+	Escudo = escudo,
+	Fantasma = fantasma,
+	Teletransporte = teletransporte,
+	Invocar = invocar,
+	Explotar = explotar,
+}
+Habilidades.TIPOS = TIPOS
+
+-- Le dice a los clientes que reproduzcan un clip de animacion.
+function Habilidades.animar(criatura, clip: string)
+	criatura.contadorAccion += 1
+	criatura.modelo:SetAttribute("Accion", `{clip}#{criatura.contadorAccion}`)
+end
+
+function Habilidades.duracionClip(criatura, clip: string?): number
+	local clips = criatura.config.animaciones and criatura.config.animaciones.clips
+	local datos = clip and clips and clips[clip]
+	return if datos then datos.duracion else 0.5
+end
+
+-- Usa una habilidad completa: anima, espera el momento del golpe, aplica el efecto y termina la animacion.
+function Habilidades.usar(criatura, hab, objetivo)
+	local funcion = TIPOS[hab.tipo]
+	if not funcion then
+		warn(`[Criaturas] Tipo de habilidad desconocido: {hab.tipo}`)
+		return
+	end
+	criatura.cooldowns[hab.nombre] = os.clock() + (hab.cooldown or 3)
+	criatura.ocupado = true
+	criatura.humanoid:MoveTo(criatura.raiz.Position)
+	if objetivo then
+		Habilidades.mirarA(criatura, objetivo.raiz.Position)
+	end
+	local duracion = Habilidades.duracionClip(criatura, hab.anim)
+	if hab.anim then
+		Habilidades.animar(criatura, hab.anim)
+	end
+	Efectos.texto(criatura.raiz, hab.nombre, colorDe(hab, criatura), criatura.alto * 0.5 + 3)
+	local retraso = hab.retraso or 0.3
+	task.wait(retraso)
+	if criatura.vivo then
+		if objetivo and Objetivos.sigueValido(criatura, objetivo) and hab.tipo ~= "Embestida" then
+			Habilidades.mirarA(criatura, objetivo.raiz.Position)
+		end
+		local ok, err = pcall(funcion, criatura, hab, objetivo)
+		if not ok then
+			warn(`[Criaturas] Error en la habilidad {hab.nombre}: {err}`)
+		end
+	end
+	local resto = duracion - retraso
+	if resto > 0 and criatura.vivo then
+		task.wait(resto)
+	end
+	criatura.ocupado = false
+end
+
+return Habilidades
+]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="8">
+        <Properties>
+          <string name="Name">IA</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	IA: el cerebro de cada criatura. Corre en el servidor unas 7 veces por segundo.
+
+	Atributo "Modo" del modelo (se puede cambiar en cualquier momento):
+	  "Guardian" (por defecto): patrulla su zona, persigue a los jugadores que se acercan y vuelve a casa.
+	  "Pelea":   pelea contra otras criaturas en modo Pelea (usa el atributo "Equipo" para bandos).
+	  "Mascota": sigue al jugador cuyo nombre esta en el atributo "Dueno" (o al mas cercano).
+	  "Estatua": se queda quieta, solo con su animacion de reposo.
+	Comportamientos especiales (config.comportamiento): "emboscada" (disfrazada hasta que alguien se acerca)
+	y "kamikaze" (corre hacia el objetivo y explota).
+]]
+
+local Players = game:GetService("Players")
+
+local Habilidades = require(script.Parent.Habilidades)
+local Interfaz = require(script.Parent.Interfaz)
+local Objetivos = require(script.Parent.Objetivos)
+
+local IA = {}
+
+local TICK = 0.15
+local MODOS = { Guardian = true, Pelea = true, Mascota = true, Estatua = true }
+
+local function ahora(): number
+	return os.clock()
+end
+
+-- Distancia a la que la criatura prefiere quedarse para pelear cuerpo a cuerpo.
+local function distanciaCerca(criatura): number
+	local mejor = math.huge
+	for _, hab in criatura.config.habilidades or {} do
+		if hab.tipo == "Golpe" or hab.tipo == "Explotar" then
+			mejor = math.min(mejor, (hab.rango or 6) * 0.75)
+		end
+	end
+	if mejor == math.huge then
+		mejor = 6
+	end
+	return mejor * criatura.escala + criatura.alto * 0.2
+end
+
+local function elegirHabilidad(criatura, distancia: number)
+	local listas = {}
+	for _, hab in criatura.config.habilidades or {} do
+		local rango = (hab.rango or 8) * criatura.escala + criatura.alto * 0.2
+		if (criatura.cooldowns[hab.nombre] or 0) <= ahora() and distancia <= rango then
+			table.insert(listas, hab)
+		end
+	end
+	if #listas == 0 then
+		return nil
+	end
+	-- Prefiere las habilidades fuertes (cooldown largo); a veces elige al azar para variar.
+	table.sort(listas, function(a, b)
+		return (a.cooldown or 0) > (b.cooldown or 0)
+	end)
+	if #listas > 1 and math.random() < 0.3 then
+		return listas[math.random(1, #listas)]
+	end
+	return listas[1]
+end
+
+local function mover(criatura, destino: Vector3)
+	criatura.humanoid:MoveTo(destino)
+end
+
+local function detener(criatura)
+	criatura.humanoid:MoveTo(criatura.raiz.Position)
+end
+
+local function posicionCasa(criatura): Vector3
+	return criatura.casa.Position
+end
+
+function IA.disfrazar(criatura, disfrazado: boolean)
+	criatura.disfrazado = disfrazado
+	criatura.modelo:SetAttribute("Disfrazado", disfrazado)
+	Interfaz.visible(criatura, not disfrazado)
+	criatura.humanoid.WalkSpeed = if disfrazado then 0 else criatura.velocidadBase
+end
+
+local function despertar(criatura)
+	IA.disfrazar(criatura, false)
+	criatura.humanoid.WalkSpeed = 0
+	Habilidades.animar(criatura, "Despertar")
+	task.wait(Habilidades.duracionClip(criatura, "Despertar"))
+	if criatura.vivo then
+		criatura.humanoid.WalkSpeed = criatura.velocidadBase
+	end
+end
+
+local function patrullar(criatura)
+	local radio = (criatura.config.radioPatrulla or 12) * criatura.escala
+	if radio <= 0 then
+		return
+	end
+	if ahora() >= criatura.siguientePatrulla then
+		local angulo = math.random() * math.pi * 2
+		local d = math.random() * radio
+		local casa = posicionCasa(criatura)
+		mover(criatura, casa + Vector3.new(math.cos(angulo) * d, 0, math.sin(angulo) * d))
+		criatura.siguientePatrulla = ahora() + 3 + math.random() * 4
+	end
+end
+
+local function pasoCombate(criatura)
+	local config = criatura.config
+	local esc = criatura.escala
+	local casa = posicionCasa(criatura)
+
+	if config.comportamiento == "emboscada" and criatura.disfrazado then
+		local intruso = Objetivos.masCercano(criatura, (config.radioDeteccion or 14) * esc)
+		if not intruso then
+			return
+		end
+		criatura.objetivo = intruso
+		despertar(criatura)
+		return
+	end
+
+	if criatura.objetivo and not Objetivos.sigueValido(criatura, criatura.objetivo) then
+		criatura.objetivo = nil
+	end
+	if criatura.objetivo and criatura.modo == "Guardian" then
+		local lejos = (criatura.objetivo.raiz.Position - casa).Magnitude > (config.radioPersecucion or 70) * esc
+		if lejos then
+			criatura.objetivo = nil
+			criatura.regresando = true
+		end
+	end
+	if not criatura.objetivo and not criatura.regresando then
+		criatura.objetivo = Objetivos.masCercano(criatura, (config.radioDeteccion or 35) * esc)
+	end
+
+	local objetivo = criatura.objetivo
+	if objetivo then
+		criatura.regresando = false
+		criatura.ultimoCombate = ahora()
+		local distancia = Objetivos.distanciaPlana(objetivo.raiz.Position, criatura.raiz.Position)
+		local hab = elegirHabilidad(criatura, distancia)
+		if hab then
+			Habilidades.usar(criatura, hab, objetivo)
+			return
+		end
+		if distancia > distanciaCerca(criatura) then
+			mover(criatura, objetivo.raiz.Position)
+		else
+			detener(criatura)
+			Habilidades.mirarA(criatura, objetivo.raiz.Position)
+		end
+		return
+	end
+
+	if criatura.regresando then
+		mover(criatura, casa)
+		if Objetivos.distanciaPlana(casa, criatura.raiz.Position) < 4 * esc then
+			criatura.regresando = false
+			criatura.humanoid.Health = criatura.humanoid.MaxHealth
+		end
+		return
+	end
+
+	if config.comportamiento == "emboscada" then
+		-- Vuelve a disfrazarse si pasa un rato tranquila cerca de casa.
+		if ahora() - criatura.ultimoCombate > 4 then
+			if Objetivos.distanciaPlana(casa, criatura.raiz.Position) > 2 * esc then
+				mover(criatura, casa)
+			else
+				detener(criatura)
+				IA.disfrazar(criatura, true)
+			end
+		end
+		return
+	end
+	patrullar(criatura)
+end
+
+local function pasoMascota(criatura)
+	local dueno = Players:FindFirstChild(criatura.modelo:GetAttribute("Dueno") or "")
+	local personaje
+	if dueno and dueno:IsA("Player") then
+		personaje = dueno.Character
+	else
+		-- Sin dueno: sigue al jugador mas cercano.
+		local mejor = math.huge
+		for _, jugador in Players:GetPlayers() do
+			local raiz = jugador.Character and jugador.Character:FindFirstChild("HumanoidRootPart")
+			if raiz then
+				local d = (raiz.Position - criatura.raiz.Position).Magnitude
+				if d < mejor then
+					mejor, personaje = d, jugador.Character
+				end
+			end
+		end
+	end
+	local raiz = personaje and personaje:FindFirstChild("HumanoidRootPart")
+	if not raiz then
+		return
+	end
+	local d = Objetivos.distanciaPlana(raiz.Position, criatura.raiz.Position)
+	local cerca = 6 * criatura.escala + criatura.alto * 0.3
+	if d > 80 then
+		-- Muy lejos: aparece junto al dueno.
+		local destino = raiz.Position - raiz.CFrame.LookVector * cerca
+		criatura.modelo:PivotTo(CFrame.lookAt(destino, raiz.Position))
+	elseif d > cerca then
+		criatura.humanoid.WalkSpeed = if d > 25 then criatura.velocidadBase * 1.6 else criatura.velocidadBase
+		mover(criatura, raiz.Position - (raiz.Position - criatura.raiz.Position).Unit * cerca * 0.8)
+	else
+		detener(criatura)
+	end
+end
+
+function IA.cambiarModo(criatura, modo: string)
+	if not MODOS[modo] then
+		warn(`[Criaturas] Modo desconocido "{modo}" en {criatura.modelo.Name}; se usa Guardian.`)
+		modo = "Guardian"
+	end
+	criatura.modo = modo
+	criatura.objetivo = nil
+	criatura.regresando = false
+	if criatura.disfrazado and modo ~= "Guardian" then
+		IA.disfrazar(criatura, false)
+	end
+	criatura.humanoid.WalkSpeed = if modo == "Estatua" then 0 else criatura.velocidadBase
+	if modo == "Estatua" then
+		detener(criatura)
+	end
+end
+
+function IA.iniciar(criatura)
+	criatura.modelo:GetAttributeChangedSignal("Modo"):Connect(function()
+		IA.cambiarModo(criatura, criatura.modelo:GetAttribute("Modo") or "Guardian")
+	end)
+	task.spawn(function()
+		while criatura.vivo and criatura.modelo.Parent do
+			if not criatura.ocupado then
+				local ok, err = pcall(function()
+					if criatura.modo == "Mascota" then
+						pasoMascota(criatura)
+					elseif criatura.modo == "Guardian" or criatura.modo == "Pelea" then
+						pasoCombate(criatura)
+					end
+				end)
+				if not ok then
+					warn(`[Criaturas] Error en la IA de {criatura.modelo.Name}: {err}`)
+					task.wait(1)
+				end
+			end
+			task.wait(TICK)
+		end
+	end)
+end
+
+return IA
+]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="9">
+        <Properties>
+          <string name="Name">Interfaz</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Interfaz: barra de vida con el nombre de la criatura.
+]]
+
+local TweenService = game:GetService("TweenService")
+
+local Interfaz = {}
+
+function Interfaz.crear(criatura)
+	local config = criatura.config
+	local color = config.colorUI or Color3.fromRGB(255, 80, 80)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "BarraCriatura"
+	gui.Size = UDim2.fromOffset(170, 40)
+	gui.StudsOffset = Vector3.new(0, criatura.alto * 0.5 + 1.5, 0)
+	gui.MaxDistance = 90
+	gui.Adornee = criatura.raiz
+	gui.ResetOnSpawn = false
+
+	local nombre = Instance.new("TextLabel")
+	nombre.Size = UDim2.new(1, 0, 0.55, 0)
+	nombre.BackgroundTransparency = 1
+	nombre.Text = config.nombre or criatura.tipo
+	nombre.TextColor3 = Color3.new(1, 1, 1)
+	nombre.TextStrokeTransparency = 0.2
+	nombre.TextScaled = true
+	nombre.Font = Enum.Font.FredokaOne
+	nombre.Parent = gui
+
+	local fondo = Instance.new("Frame")
+	fondo.Position = UDim2.new(0.1, 0, 0.62, 0)
+	fondo.Size = UDim2.new(0.8, 0, 0.28, 0)
+	fondo.BackgroundColor3 = Color3.fromRGB(25, 20, 30)
+	fondo.BorderSizePixel = 0
+	fondo.Parent = gui
+	local esquina = Instance.new("UICorner")
+	esquina.CornerRadius = UDim.new(0.5, 0)
+	esquina.Parent = fondo
+	local borde = Instance.new("UIStroke")
+	borde.Color = Color3.new(0, 0, 0)
+	borde.Thickness = 1.5
+	borde.Parent = fondo
+
+	local relleno = Instance.new("Frame")
+	relleno.Size = UDim2.fromScale(1, 1)
+	relleno.BackgroundColor3 = color
+	relleno.BorderSizePixel = 0
+	relleno.Parent = fondo
+	local esquina2 = esquina:Clone()
+	esquina2.Parent = relleno
+
+	gui.Parent = criatura.raiz
+	criatura.barra = gui
+
+	local function actualizar()
+		local h = criatura.humanoid
+		local frac = if h.MaxHealth > 0 then math.clamp(h.Health / h.MaxHealth, 0, 1) else 0
+		TweenService:Create(relleno, TweenInfo.new(0.2), { Size = UDim2.fromScale(frac, 1) }):Play()
+	end
+	criatura.humanoid.HealthChanged:Connect(actualizar)
+	actualizar()
+end
+
+function Interfaz.visible(criatura, visible: boolean)
+	if criatura.barra then
+		criatura.barra.Enabled = visible
+	end
+end
+
+return Interfaz
+]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="10">
+        <Properties>
+          <string name="Name">Objetivos</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Objetivos: a quien puede atacar cada criatura, dano, empuje y aturdimiento.
+
+	Modos (atributo "Modo" del modelo):
+	  Guardian -> ataca a los jugadores que se acercan.
+	  Pelea    -> pelea contra otras criaturas en modo Pelea (de otro "Equipo" si se usa ese atributo).
+	  Mascota / Estatua -> no ataca.
+]]
+
+local Players = game:GetService("Players")
+
+local Registro = require(script.Parent.Registro)
+
+local Objetivos = {}
+
+export type Objetivo = {
+	modelo: Model,
+	humanoid: Humanoid,
+	raiz: BasePart,
+	esJugador: boolean,
+}
+
+local function entradaDePersonaje(personaje: Model?): Objetivo?
+	if not personaje then
+		return nil
+	end
+	local humanoid = personaje:FindFirstChildOfClass("Humanoid")
+	local raiz = personaje:FindFirstChild("HumanoidRootPart")
+	if humanoid and raiz and raiz:IsA("BasePart") and humanoid.Health > 0 then
+		return { modelo = personaje, humanoid = humanoid, raiz = raiz, esJugador = true }
+	end
+	return nil
+end
+
+local function entradaDeCriatura(c): Objetivo?
+	if c and c.vivo and c.humanoid.Health > 0 and c.raiz.Parent then
+		return { modelo = c.modelo, humanoid = c.humanoid, raiz = c.raiz, esJugador = false }
+	end
+	return nil
+end
+
+local function sonEnemigas(a, b): boolean
+	if a == b then
+		return false
+	end
+	if a.invocador == b or b.invocador == a then
+		return false
+	end
+	local ea, eb = a.modelo:GetAttribute("Equipo"), b.modelo:GetAttribute("Equipo")
+	if ea ~= nil and ea ~= "" and ea == eb then
+		return false
+	end
+	return true
+end
+
+-- Lista de objetivos validos para una criatura segun su modo.
+function Objetivos.validos(criatura): { Objetivo }
+	local lista = {}
+	local modo = criatura.modo
+	if modo == "Guardian" then
+		for _, jugador in Players:GetPlayers() do
+			local e = entradaDePersonaje(jugador.Character)
+			if e then
+				table.insert(lista, e)
+			end
+		end
+	elseif modo == "Pelea" then
+		for _, otra in Registro.criaturas do
+			if otra.modo == "Pelea" and sonEnemigas(criatura, otra) and not otra.modelo:GetAttribute("Intocable") then
+				local e = entradaDeCriatura(otra)
+				if e then
+					table.insert(lista, e)
+				end
+			end
+		end
+	end
+	return lista
+end
+
+function Objetivos.sigueValido(criatura, objetivo: Objetivo?): boolean
+	if not objetivo then
+		return false
+	end
+	if not objetivo.modelo.Parent or not objetivo.raiz.Parent or objetivo.humanoid.Health <= 0 then
+		return false
+	end
+	if objetivo.esJugador then
+		return criatura.modo == "Guardian" and Players:GetPlayerFromCharacter(objetivo.modelo) ~= nil
+	end
+	local otra = Registro.de(objetivo.modelo)
+	return criatura.modo == "Pelea" and otra ~= nil and otra.vivo and otra.modo == "Pelea"
+		and not objetivo.modelo:GetAttribute("Intocable")
+end
+
+local function distanciaPlana(a: Vector3, b: Vector3): number
+	return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
+end
+Objetivos.distanciaPlana = distanciaPlana
+
+function Objetivos.masCercano(criatura, radio: number, desde: Vector3?): Objetivo?
+	local origen = desde or criatura.raiz.Position
+	local mejor, mejorDist = nil, radio
+	for _, e in Objetivos.validos(criatura) do
+		local d = (e.raiz.Position - origen).Magnitude
+		if d <= mejorDist then
+			mejor, mejorDist = e, d
+		end
+	end
+	return mejor
+end
+
+function Objetivos.enRadio(criatura, centro: Vector3, radio: number): { Objetivo }
+	local lista = {}
+	for _, e in Objetivos.validos(criatura) do
+		if (e.raiz.Position - centro).Magnitude <= radio then
+			table.insert(lista, e)
+		end
+	end
+	return lista
+end
+
+-- Aplica dano respetando escudos (atributo "Reduccion") y forma fantasma (atributo "Intocable").
+function Objetivos.danar(criatura, objetivo: Objetivo, cantidad: number)
+	if objetivo.humanoid.Health <= 0 or objetivo.modelo:GetAttribute("Intocable") then
+		return
+	end
+	local reduccion = objetivo.modelo:GetAttribute("Reduccion")
+	if type(reduccion) == "number" then
+		cantidad *= math.clamp(1 - reduccion, 0, 1)
+	end
+	objetivo.humanoid:TakeDamage(cantidad)
+	if not objetivo.esJugador then
+		objetivo.modelo:SetAttribute("Golpe", (objetivo.modelo:GetAttribute("Golpe") or 0) + 1)
+		local otra = Registro.de(objetivo.modelo)
+		if otra and otra.vivo and not otra.objetivo then
+			-- La criatura golpeada responde al ataque.
+			local atacante = { modelo = criatura.modelo, humanoid = criatura.humanoid, raiz = criatura.raiz, esJugador = false }
+			otra.objetivo = atacante
+		end
+	end
+	if criatura.modelo then
+		objetivo.modelo:SetAttribute("UltimoAtacante", criatura.modelo.Name)
+	end
+end
+
+-- Empuja al objetivo (funciona con jugadores porque la fuerza la simula su propio cliente).
+function Objetivos.empujar(objetivo: Objetivo, direccion: Vector3, fuerza: number)
+	if fuerza <= 0 or objetivo.humanoid.Health <= 0 then
+		return
+	end
+	local plano = Vector3.new(direccion.X, 0, direccion.Z)
+	if plano.Magnitude < 1e-3 then
+		plano = Vector3.new(0, 0, 1)
+	end
+	local velocidad = plano.Unit * fuerza + Vector3.new(0, fuerza * 0.4, 0)
+	local adjunto = Instance.new("Attachment")
+	adjunto.Name = "EmpujeCriatura"
+	adjunto.Parent = objetivo.raiz
+	local lv = Instance.new("LinearVelocity")
+	lv.Attachment0 = adjunto
+	lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+	lv.VectorVelocity = velocidad
+	lv.MaxForce = 1e6
+	lv.RelativeTo = Enum.ActuatorRelativeTo.World
+	lv.Parent = adjunto
+	task.delay(0.18, function()
+		adjunto:Destroy()
+	end)
+end
+
+-- Deja quieto al objetivo unos segundos.
+function Objetivos.aturdir(objetivo: Objetivo, segundos: number)
+	if segundos <= 0 then
+		return
+	end
+	local h = objetivo.humanoid
+	local hasta = os.clock() + segundos
+	local actual = h:GetAttribute("AturdidoHasta")
+	if type(actual) ~= "number" or actual < os.clock() then
+		h:SetAttribute("VelocidadAntesDeAturdir", h.WalkSpeed)
+	end
+	h:SetAttribute("AturdidoHasta", math.max(hasta, if type(actual) == "number" then actual else 0))
+	h.WalkSpeed = 0
+	task.delay(segundos, function()
+		local limite = h:GetAttribute("AturdidoHasta")
+		if h.Parent and type(limite) == "number" and os.clock() >= limite - 0.01 then
+			local antes = h:GetAttribute("VelocidadAntesDeAturdir")
+			h.WalkSpeed = if type(antes) == "number" then antes else 16
+			h:SetAttribute("AturdidoHasta", nil)
+			h:SetAttribute("VelocidadAntesDeAturdir", nil)
+		end
+	end)
+end
+
+return Objetivos
+]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="11">
+        <Properties>
+          <string name="Name">Registro</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Registro: lista de criaturas activas, plantillas para reaparecer/invocar y configuraciones.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
+
+local Registro = {}
+
+Registro.criaturas = {} -- [Model] = criatura
+Registro.configs = {} -- [tipo] = config
+
+local carpetaPlantillas: Folder? = nil
+
+function Registro.cargarConfigs(carpetaConfigs: Instance)
+	for _, modulo in carpetaConfigs:GetChildren() do
+		if modulo:IsA("ModuleScript") then
+			local ok, config = pcall(require, modulo)
+			if ok and type(config) == "table" then
+				Registro.configs[modulo.Name] = config
+			else
+				warn(`[Criaturas] No se pudo cargar la configuracion {modulo.Name}: {config}`)
+			end
+		end
+	end
+end
+
+-- Descubre el tipo de criatura de un modelo: atributo "Tipo", nombre exacto o nombre con numeros/copias al final.
+function Registro.tipoDe(modelo: Instance): string?
+	if not modelo:IsA("Model") then
+		return nil
+	end
+	local tipo = modelo:GetAttribute("Tipo")
+	if type(tipo) == "string" and Registro.configs[tipo] then
+		return tipo
+	end
+	if Registro.configs[modelo.Name] then
+		return modelo.Name
+	end
+	local limpio = modelo.Name:gsub("%s*%(%d+%)$", ""):gsub("[%s_%-]*[Cc]opy$", ""):gsub("%d+$", "")
+	if Registro.configs[limpio] then
+		return limpio
+	end
+	return nil
+end
+
+function Registro.plantillas(): Folder
+	if not carpetaPlantillas then
+		local carpeta = ServerStorage:FindFirstChild("PlantillasCriaturas")
+		if not carpeta then
+			carpeta = Instance.new("Folder")
+			carpeta.Name = "PlantillasCriaturas"
+			carpeta.Parent = ServerStorage
+		end
+		carpetaPlantillas = carpeta :: Folder
+	end
+	return carpetaPlantillas :: Folder
+end
+
+-- Guarda una copia limpia (sin armar) del modelo para reaparecer o invocar.
+function Registro.guardarPlantilla(tipo: string, modelo: Model)
+	local carpeta = Registro.plantillas()
+	if carpeta:FindFirstChild(tipo) then
+		return
+	end
+	local copia = modelo:Clone()
+	copia.Name = tipo
+	copia:SetAttribute("Tipo", tipo)
+	copia.Parent = carpeta
+end
+
+function Registro.plantilla(tipo: string): Model?
+	local p = Registro.plantillas():FindFirstChild(tipo)
+	if p and p:IsA("Model") then
+		return p
+	end
+	return nil
+end
+
+-- Busca en ServerStorage y ReplicatedStorage modelos de criaturas para usarlos como plantillas.
+function Registro.buscarPlantillas()
+	for _, lugar in { ServerStorage, ReplicatedStorage } do
+		for _, d in lugar:GetDescendants() do
+			if d:IsA("Model") and not d:IsDescendantOf(Registro.plantillas()) then
+				local tipo = Registro.tipoDe(d)
+				if tipo and not d:FindFirstChild("HumanoidRootPart") then
+					Registro.guardarPlantilla(tipo, d)
+				end
+			end
+		end
+	end
+end
+
+function Registro.agregar(criatura)
+	Registro.criaturas[criatura.modelo] = criatura
+end
+
+function Registro.quitar(modelo: Model)
+	Registro.criaturas[modelo] = nil
+end
+
+function Registro.de(modelo: Instance?)
+	if not modelo then
+		return nil
+	end
+	return Registro.criaturas[modelo]
+end
+
+-- Devuelve la criatura a la que pertenece una parte (o nil).
+function Registro.dePieza(pieza: Instance)
+	local modelo = pieza:FindFirstAncestorOfClass("Model")
+	while modelo do
+		local c = Registro.criaturas[modelo]
+		if c then
+			return c
+		end
+		modelo = modelo:FindFirstAncestorOfClass("Model")
+	end
+	return nil
+end
+
+return Registro
+]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="12">
+        <Properties>
+          <string name="Name">Rig</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Rig: convierte el modelo importado (MeshParts sueltas) en una criatura armada:
+	  - Usa los marcadores _Frente y _Arriba para saber hacia donde mira y su escala, aunque el
+	    importador lo haya girado o escalado.
+	  - Crea HumanoidRootPart + Humanoid y un Motor6D llamado "Articulacion" dentro de cada parte movible.
+	  - Pone en Neon las piezas "__Brillo_" y semitransparentes las "__Vidrio".
+]]
+
+local CollectionService = game:GetService("CollectionService")
+
+local Rig = {}
+
+local function partesPorNombre(modelo: Model): { [string]: BasePart }
+	local mapa = {}
+	for _, d in modelo:GetDescendants() do
+		if d:IsA("BasePart") and not mapa[d.Name] then
+			mapa[d.Name] = d
+		end
+	end
+	return mapa
+end
+
+-- Ordena las partes para que cada padre se arme antes que sus hijos.
+local function ordenar(partesRig): { string }
+	local orden, visitado = {}, {}
+	local function visitar(nombre: string)
+		if visitado[nombre] or nombre == "Cuerpo" then
+			return
+		end
+		visitado[nombre] = true
+		local datos = partesRig[nombre]
+		if datos and datos.padre and partesRig[datos.padre] then
+			visitar(datos.padre)
+		end
+		table.insert(orden, nombre)
+	end
+	local nombres = {}
+	for nombre in partesRig do
+		table.insert(nombres, nombre)
+	end
+	table.sort(nombres)
+	for _, nombre in nombres do
+		visitar(nombre)
+	end
+	return orden
+end
+
+local function motor(nombre: string, parte0: BasePart, parte1: BasePart, union: CFrame): Motor6D
+	local m = Instance.new("Motor6D")
+	m.Name = nombre
+	m.Part0 = parte0
+	m.Part1 = parte1
+	m.C0 = parte0.CFrame:Inverse() * union
+	m.C1 = parte1.CFrame:Inverse() * union
+	m.Parent = parte1
+	return m
+end
+
+local function soldar(a: BasePart, b: BasePart)
+	local w = Instance.new("WeldConstraint")
+	w.Part0, w.Part1 = a, b
+	w.Parent = b
+end
+
+-- Limites del modelo en el marco de la criatura (adelante, derecha, arriba) relativos al centro del cuerpo.
+local function limites(partes: { BasePart }, centro: Vector3, adelante: Vector3, derecha: Vector3, arriba: Vector3)
+	local minimo = Vector3.new(math.huge, math.huge, math.huge)
+	local maximo = -minimo
+	for _, p in partes do
+		local m = p.Size / 2
+		for _, sx in { -1, 1 } do
+			for _, sy in { -1, 1 } do
+				for _, sz in { -1, 1 } do
+					local w = p.CFrame:PointToWorldSpace(Vector3.new(m.X * sx, m.Y * sy, m.Z * sz)) - centro
+					local v = Vector3.new(w:Dot(adelante), w:Dot(derecha), w:Dot(arriba))
+					minimo = Vector3.new(math.min(minimo.X, v.X), math.min(minimo.Y, v.Y), math.min(minimo.Z, v.Z))
+					maximo = Vector3.new(math.max(maximo.X, v.X), math.max(maximo.Y, v.Y), math.max(maximo.Z, v.Z))
+				end
+			end
+		end
+	end
+	return minimo, maximo
+end
+
+--[[
+	Arma el modelo. Devuelve una tabla con lo necesario para la IA, o nil si el modelo no sirve.
+]]
+function Rig.armar(modelo: Model, tipo: string, config)
+	local rig = config.rig
+	local partes = partesPorNombre(modelo)
+	local cuerpo = partes.Cuerpo
+	if not cuerpo then
+		warn(`[Criaturas] {modelo:GetFullName()} no tiene una parte llamada "Cuerpo". ¿Es el FBX correcto?`)
+		return nil
+	end
+	if modelo:FindFirstChild("HumanoidRootPart") then
+		warn(`[Criaturas] {modelo:GetFullName()} ya estaba armado; se ignora.`)
+		return nil
+	end
+
+	-- Marco de la criatura a partir de los marcadores.
+	local centro = cuerpo.Position
+	local frente, arribaM = partes._Frente, partes._Arriba
+	local adelante, arriba, escala
+	if frente and arribaM then
+		local f = frente.Position - centro
+		escala = f.Magnitude / rig.marcador
+		adelante = f.Unit
+		local u = (arribaM.Position - centro).Unit
+		arriba = (u - adelante * u:Dot(adelante)).Unit
+	else
+		warn(`[Criaturas] {modelo.Name}: faltan los marcadores _Frente/_Arriba; se usa la orientacion del modelo.`)
+		local pivote = modelo:GetPivot()
+		adelante, arriba, escala = pivote.LookVector, pivote.UpVector, 1
+	end
+	local derecha = adelante:Cross(arriba)
+	if frente then
+		frente:Destroy()
+	end
+	if arribaM then
+		arribaM:Destroy()
+	end
+	partes._Frente, partes._Arriba = nil, nil
+
+	local function aMundo(v): Vector3
+		return centro + adelante * (v[1] * escala) + derecha * (v[2] * escala) + arriba * (v[3] * escala)
+	end
+	local function marco(posicion: Vector3): CFrame
+		-- Columnas: derecha (X), arriba (Y), atras (Z) -> LookVector = adelante.
+		return CFrame.fromMatrix(posicion, derecha, arriba, -adelante)
+	end
+
+	local lista = {}
+	for _, p in partes do
+		table.insert(lista, p)
+	end
+	local minimo, maximo = limites(lista, centro, adelante, derecha, arriba)
+	local alto = maximo.Z - minimo.Z
+	local largo = maximo.X - minimo.X
+	local ancho = maximo.Y - minimo.Y
+
+	-- HumanoidRootPart invisible en el centro, con la mitad del alto.
+	local raiz = Instance.new("Part")
+	raiz.Name = "HumanoidRootPart"
+	raiz.Transparency = 1
+	raiz.CanCollide = true -- las demas piezas no chocan; la raiz hace que la criatura sea solida
+	raiz.CanTouch = false
+	raiz.Size = Vector3.new(math.max(ancho * 0.5, 1), math.max(alto * 0.5, 1), math.max(largo * 0.5, 1))
+	raiz.CFrame = marco(centro + arriba * (minimo.Z + alto * 0.5))
+	raiz.Parent = modelo
+
+	motor("Articulacion", raiz, cuerpo, marco(centro))
+	local armadas = { Cuerpo = cuerpo }
+	for _, nombre in ordenar(rig.partes) do
+		local datos = rig.partes[nombre]
+		local parte = partes[nombre]
+		if parte then
+			local padre = armadas[datos.padre] or cuerpo
+			motor("Articulacion", padre, parte, marco(aMundo(datos.union)))
+			armadas[nombre] = parte
+		end
+	end
+
+	-- Piezas de brillo/vidrio y cualquier otra pieza: soldadas a su parte.
+	local brillos = config.coloresBrillo or {}
+	for nombre, p in partes do
+		if not armadas[nombre] then
+			local duena = rig.adjuntos and rig.adjuntos[nombre]
+			soldar(armadas[duena] or cuerpo, p)
+		end
+		if brillos[nombre] then
+			p.Material = Enum.Material.Neon
+			p.Color = brillos[nombre]
+			pcall(function()
+				(p :: any).TextureID = ""
+			end)
+		elseif string.find(nombre, "__Vidrio", 1, true) then
+			p.Transparency = 0.4
+			p.CastShadow = false
+		end
+	end
+
+	for _, p in partes do
+		p.Anchored = false
+		p.CanCollide = false
+		p.CanTouch = false
+		p.Massless = true
+	end
+	raiz.Massless = false
+
+	local humanoid = Instance.new("Humanoid")
+	humanoid.RigType = Enum.HumanoidRigType.R15
+	humanoid.RequiresNeck = false
+	humanoid.BreakJointsOnDeath = false
+	humanoid.HipHeight = alto * 0.25
+	humanoid.MaxHealth = config.vida or 100
+	humanoid.Health = humanoid.MaxHealth
+	humanoid.WalkSpeed = config.velocidad or 16
+	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+	humanoid.Parent = modelo
+
+	modelo.PrimaryPart = raiz
+	modelo:SetAttribute("Tipo", tipo)
+	modelo:SetAttribute("Escala", escala)
+	modelo:SetAttribute("Estado", "Vivo")
+	pcall(function()
+		raiz:SetNetworkOwner(nil)
+	end)
+	CollectionService:AddTag(modelo, "Criatura")
+
+	return {
+		raiz = raiz,
+		cuerpo = cuerpo,
+		humanoid = humanoid,
+		escala = escala,
+		alto = alto,
+		partes = armadas,
+	}
+end
+
+return Rig
+]]></ProtectedString>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="13">
+      <Properties>
+        <string name="Name">Compartido</string>
+      </Properties>
+      <Item class="ModuleScript" referent="14">
+        <Properties>
+          <string name="Name">Animacion</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Animacion: matematica de animacion compartida (la misma que usa la vista previa de Blender).
+
+	Ciclos: { [parte] = { {canal, amplitud, frecuencia, fase}, ... } }
+	        valor = amplitud * sin(2*pi*(frecuencia*t + fase))
+	Clips:  { duracion = n, claves = { {t = tiempo, pose = {[parte] = {[canal] = valor}}}, ... } }
+	        interpolacion suave (smoothstep) entre claves.
+	Canales: rx, ry, rz (grados) y px, py, pz (studs) en el marco de la articulacion:
+	        X = derecha de la criatura, Y = arriba, Z = atras.
+]]
+
+local Animacion = {}
+
+local function suave(x: number): number
+	return x * x * (3 - 2 * x)
+end
+
+local function sumarCanales(origen, destino, peso: number)
+	for canal, valor in origen do
+		destino[canal] = (destino[canal] or 0) + valor * peso
+	end
+end
+
+local function obtener(pose, parte)
+	local d = pose[parte]
+	if not d then
+		d = {}
+		pose[parte] = d
+	end
+	return d
+end
+
+-- Suma un ciclo de osciladores en la pose de salida.
+function Animacion.evaluarCiclo(ciclo, t: number, salida, peso: number)
+	if not ciclo or peso <= 0 then
+		return
+	end
+	for parte, osciladores in ciclo do
+		local d = obtener(salida, parte)
+		for _, o in osciladores do
+			local canal, amplitud, frecuencia, fase = o[1], o[2], o[3], o[4]
+			d[canal] = (d[canal] or 0) + peso * amplitud * math.sin(2 * math.pi * (frecuencia * t + fase))
+		end
+	end
+end
+
+-- Suma un clip (poses clave) en la pose de salida. t se limita a [0, duracion].
+function Animacion.evaluarClip(clip, t: number, salida, peso: number)
+	if not clip or peso <= 0 then
+		return
+	end
+	local claves = clip.claves
+	local n = #claves
+	if n == 0 then
+		return
+	end
+	if t <= claves[1].t then
+		for parte, canales in claves[1].pose do
+			sumarCanales(canales, obtener(salida, parte), peso)
+		end
+		return
+	end
+	for i = 1, n - 1 do
+		local a, b = claves[i], claves[i + 1]
+		if t >= a.t and t <= b.t then
+			local k = suave((t - a.t) / math.max(b.t - a.t, 1e-6))
+			local partes = {}
+			for parte in a.pose do
+				partes[parte] = true
+			end
+			for parte in b.pose do
+				partes[parte] = true
+			end
+			for parte in partes do
+				local ca, cb = a.pose[parte] or {}, b.pose[parte] or {}
+				local d = obtener(salida, parte)
+				local canales = {}
+				for canal in ca do
+					canales[canal] = true
+				end
+				for canal in cb do
+					canales[canal] = true
+				end
+				for canal in canales do
+					local va, vb = ca[canal] or 0, cb[canal] or 0
+					d[canal] = (d[canal] or 0) + (va + (vb - va) * k) * peso
+				end
+			end
+			return
+		end
+	end
+	for parte, canales in claves[n].pose do
+		sumarCanales(canales, obtener(salida, parte), peso)
+	end
+end
+
+-- Convierte los canales de una parte en el CFrame para Motor6D.Transform.
+function Animacion.aCFrame(canales, escala: number): CFrame
+	local rad = math.rad
+	return CFrame.new((canales.px or 0) * escala, (canales.py or 0) * escala, (canales.pz or 0) * escala)
+		* CFrame.Angles(rad(canales.rx or 0), rad(canales.ry or 0), rad(canales.rz or 0))
+end
+
+return Animacion
+]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="Folder" referent="15">
+        <Properties>
+          <string name="Name">Configs</string>
+        </Properties>
+        <Item class="ModuleScript" referent="16">
+          <Properties>
+            <string name="Name">GalloRelampago</string>
+            <ProtectedString name="Source"><![CDATA[-- Generado por herramientas/criaturas/generar.py. No lo edites a mano: cambia el archivo
+-- herramientas/criaturas/gallorelampago.py y vuelve a generar.
+return {
+	nombre = "Gallo Relámpago",
+	vida = 260,
+	velocidad = 22,
+	comportamiento = "normal",
+	radioDeteccion = 40,
+	radioPatrulla = 18,
+	radioPersecucion = 80,
+	reaparecer = 25,
+	colorUI = Color3.fromRGB(70, 215, 255),
+	habilidades = {
+		{
+			nombre = "Picotazo Eléctrico",
+			tipo = "Golpe",
+			anim = "Picotazo",
+			rango = 6,
+			alcance = 6,
+			angulo = 70,
+			danio = 10,
+			empuje = 25,
+			aturdir = 0.2,
+			cooldown = 1.5,
+			retraso = 0.2,
+			color = Color3.fromRGB(120, 235, 255),
+		},
+		{
+			nombre = "Rayo Encadenado",
+			tipo = "Cadena",
+			anim = "RayoEncadenado",
+			rango = 30,
+			danio = 16,
+			saltos = 3,
+			radioSalto = 15,
+			cooldown = 7,
+			retraso = 0.4,
+			color = Color3.fromRGB(255, 230, 70),
+		},
+		{
+			nombre = "Embestida Relámpago",
+			tipo = "Embestida",
+			anim = "Embestida",
+			rango = 28,
+			distancia = 26,
+			velocidad = 90,
+			danio = 20,
+			empuje = 40,
+			ancho = 5,
+			cooldown = 6,
+			retraso = 0.3,
+			color = Color3.fromRGB(80, 220, 255),
+		},
+	},
+	tipo = "GalloRelampago",
+	rig = {
+		marcador = 2.0,
+		suelo = -3.2026,
+		partes = {
+			Cabeza = {
+				padre = "Cuerpo",
+				union = { 0.8509, -0.0, 0.7524 },
+			},
+			Cresta = {
+				padre = "Cabeza",
+				union = { 1.3809, -0.0, 2.6024 },
+			},
+			AlaIzq = {
+				padre = "Cuerpo",
+				union = { 0.8009, -0.62, 0.6524 },
+			},
+			AlaDer = {
+				padre = "Cuerpo",
+				union = { 0.8009, 0.62, 0.6524 },
+			},
+			PataIzq = {
+				padre = "Cuerpo",
+				union = { 0.1009, -0.42, -0.5476 },
+			},
+			PataDer = {
+				padre = "Cuerpo",
+				union = { 0.1009, 0.42, -0.5476 },
+			},
+			Cola1 = {
+				padre = "Cuerpo",
+				union = { -1.0491, -0.0, 0.0524 },
+			},
+			Cola2 = {
+				padre = "Cola1",
+				union = { -1.6991, -0.0, 1.3824 },
+			},
+		},
+		adjuntos = {
+			Cuerpo__Brillo_rayo = "Cuerpo",
+			Cabeza__Brillo_cian_brillo = "Cabeza",
+			Cresta__Brillo_rayo_blanco = "Cresta",
+			Cresta__Brillo_rayo = "Cresta",
+			AlaIzq__Brillo_rayo = "AlaIzq",
+			AlaDer__Brillo_rayo = "AlaDer",
+			PataIzq__Brillo_cian_brillo = "PataIzq",
+			PataDer__Brillo_cian_brillo = "PataDer",
+			Cola2__Brillo_cian_brillo = "Cola2",
+		},
+	},
+	coloresBrillo = {
+		Cuerpo__Brillo_rayo = Color3.fromRGB(255, 219, 38),
+		Cabeza__Brillo_cian_brillo = Color3.fromRGB(76, 242, 255),
+		Cresta__Brillo_rayo_blanco = Color3.fromRGB(255, 242, 133),
+		Cresta__Brillo_rayo = Color3.fromRGB(255, 219, 38),
+		AlaIzq__Brillo_rayo = Color3.fromRGB(255, 219, 38),
+		AlaDer__Brillo_rayo = Color3.fromRGB(255, 219, 38),
+		PataIzq__Brillo_cian_brillo = Color3.fromRGB(76, 242, 255),
+		PataDer__Brillo_cian_brillo = Color3.fromRGB(76, 242, 255),
+		Cola2__Brillo_cian_brillo = Color3.fromRGB(76, 242, 255),
+	},
+	animaciones = {
+		ciclos = {
+			Idle = {
+				Raiz = {
+					{ "py", 0.04, 1.2, 0 },
+					{ "rx", 1.5, 0.6, 0.3 },
+				},
+				Cabeza = {
+					{ "rx", 4, 0.6, 0 },
+					{ "ry", 14, 0.35, 0.1 },
+				},
+				Cresta = {
+					{ "rz", 4, 3.5, 0 },
+					{ "rx", 3, 2.1, 0.3 },
+				},
+				AlaIzq = {
+					{ "rz", -4, 1.2, 0 },
+				},
+				Cola1 = {
+					{ "rx", 3, 0.6, 0.2 },
+					{ "ry", 3, 0.4, 0 },
+				},
+				Cola2 = {
+					{ "rx", 5, 0.6, 0.4 },
+					{ "ry", 4, 0.4, 0.25 },
+				},
+				AlaDer = {
+					{ "rz", 4, 1.2, 0 },
+				},
+			},
+			Caminar = {
+				Raiz = {
+					{ "py", 0.15, 5.2, 0.25 },
+					{ "rz", 3, 2.6, 0 },
+				},
+				Cabeza = {
+					{ "pz", 0.15, 5.2, 0 },
+					{ "rx", 5, 5.2, 0.25 },
+				},
+				Cresta = {
+					{ "rx", 6, 5.2, 0.4 },
+				},
+				AlaIzq = {
+					{ "rz", -8, 2.6, 0.25 },
+				},
+				PataIzq = {
+					{ "rx", 32, 2.6, 0 },
+				},
+				PataDer = {
+					{ "rx", 32, 2.6, 0.5 },
+				},
+				Cola1 = {
+					{ "rx", 5, 5.2, 0.1 },
+					{ "ry", 4, 2.6, 0 },
+				},
+				Cola2 = {
+					{ "rx", 6, 5.2, 0.3 },
+					{ "ry", 5, 2.6, 0.2 },
+				},
+				AlaDer = {
+					{ "rz", 8, 2.6, 0.25 },
+				},
+			},
+		},
+		clips = {
+			Picotazo = {
+				duracion = 0.6,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.11,
+						pose = {
+							Raiz = {
+								rx = 6,
+								pz = 0.25,
+							},
+							Cabeza = {
+								rx = 25,
+								pz = 0.15,
+							},
+							Cresta = {
+								rx = 15,
+							},
+							AlaIzq = {
+								rz = -15,
+							},
+							Cola1 = {
+								rx = -6,
+							},
+							AlaDer = {
+								rz = 15,
+							},
+						},
+					},
+					{
+						t = 0.2,
+						pose = {
+							Raiz = {
+								rx = -14,
+								pz = -0.35,
+							},
+							Cabeza = {
+								rx = -45,
+								pz = -0.3,
+							},
+							Cresta = {
+								rx = -12,
+							},
+							AlaIzq = {
+								rz = -30,
+							},
+							Cola1 = {
+								rx = 8,
+							},
+							Cola2 = {
+								rx = 10,
+							},
+							AlaDer = {
+								rz = 30,
+							},
+						},
+					},
+					{
+						t = 0.32,
+						pose = {
+							Raiz = {
+								rx = -10,
+								pz = -0.25,
+							},
+							Cabeza = {
+								rx = -35,
+								pz = -0.2,
+							},
+							AlaIzq = {
+								rz = -20,
+							},
+							Cola2 = {
+								rx = -6,
+							},
+							AlaDer = {
+								rz = 20,
+							},
+						},
+					},
+					{
+						t = 0.6,
+						pose = {},
+					},
+				},
+			},
+			RayoEncadenado = {
+				duracion = 1.1,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.28,
+						pose = {
+							Raiz = {
+								py = -0.1,
+								rx = -6,
+							},
+							Cabeza = {
+								rx = -12,
+							},
+							Cresta = {
+								rx = -12,
+							},
+							AlaIzq = {
+								rz = -40,
+							},
+							Cola1 = {
+								rx = 6,
+							},
+							AlaDer = {
+								rz = 40,
+							},
+						},
+					},
+					{
+						t = 0.4,
+						pose = {
+							Raiz = {
+								py = 0.35,
+								rx = 10,
+							},
+							Cabeza = {
+								rx = 22,
+							},
+							Cresta = {
+								rx = 20,
+							},
+							AlaIzq = {
+								rz = -80,
+								ry = -15,
+							},
+							Cola1 = {
+								rx = -15,
+							},
+							Cola2 = {
+								rx = -10,
+							},
+							AlaDer = {
+								rz = 80,
+								ry = 15,
+							},
+						},
+					},
+					{
+						t = 0.65,
+						pose = {
+							Raiz = {
+								py = 0.25,
+								rx = 8,
+							},
+							Cabeza = {
+								rx = 16,
+							},
+							Cresta = {
+								rx = 14,
+							},
+							AlaIzq = {
+								rz = -70,
+								ry = -12,
+							},
+							Cola1 = {
+								rx = -12,
+							},
+							Cola2 = {
+								rx = 6,
+							},
+							AlaDer = {
+								rz = 70,
+								ry = 12,
+							},
+						},
+					},
+					{
+						t = 1.1,
+						pose = {},
+					},
+				},
+			},
+			Embestida = {
+				duracion = 1.15,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.2,
+						pose = {
+							Raiz = {
+								py = -0.3,
+								rx = -12,
+								pz = 0.35,
+							},
+							Cabeza = {
+								rx = 15,
+							},
+							AlaIzq = {
+								rz = -30,
+							},
+							PataIzq = {
+								rx = 40,
+							},
+							PataDer = {
+								rx = -16,
+							},
+							Cola1 = {
+								rx = -12,
+							},
+							AlaDer = {
+								rz = 30,
+							},
+						},
+					},
+					{
+						t = 0.3,
+						pose = {
+							Raiz = {
+								py = -0.15,
+								rx = -28,
+								pz = -0.6,
+							},
+							Cabeza = {
+								rx = -20,
+								pz = -0.2,
+							},
+							Cresta = {
+								rx = 25,
+							},
+							AlaIzq = {
+								rz = -55,
+								ry = -30,
+							},
+							Cola1 = {
+								rx = 20,
+							},
+							Cola2 = {
+								rx = 15,
+							},
+							PataIzq = {
+								rx = -10,
+							},
+							PataDer = {
+								rx = -10,
+							},
+							AlaDer = {
+								rz = 55,
+								ry = 30,
+							},
+						},
+					},
+					{
+						t = 0.55,
+						pose = {
+							Raiz = {
+								py = -0.1,
+								rx = -25,
+								pz = -0.5,
+							},
+							Cabeza = {
+								rx = -18,
+								pz = -0.2,
+							},
+							Cresta = {
+								rx = 22,
+							},
+							AlaIzq = {
+								rz = -60,
+								ry = -30,
+							},
+							Cola1 = {
+								rx = 18,
+							},
+							Cola2 = {
+								rx = 20,
+							},
+							PataIzq = {
+								rx = -12,
+							},
+							PataDer = {
+								rx = -12,
+							},
+							AlaDer = {
+								rz = 60,
+								ry = 30,
+							},
+						},
+					},
+					{
+						t = 0.8,
+						pose = {
+							Raiz = {
+								py = -0.25,
+								rx = -8,
+							},
+							Cabeza = {
+								rx = 10,
+							},
+							AlaIzq = {
+								rz = -35,
+							},
+							PataIzq = {
+								rx = 33,
+							},
+							PataDer = {
+								rx = -17,
+							},
+							Cola2 = {
+								rx = -8,
+							},
+							AlaDer = {
+								rz = 35,
+							},
+						},
+					},
+					{
+						t = 1.15,
+						pose = {},
+					},
+				},
+			},
+			Golpeado = {
+				duracion = 0.35,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.08,
+						pose = {
+							Raiz = {
+								rx = 10,
+								pz = 0.25,
+							},
+							Cabeza = {
+								rx = 20,
+							},
+							Cresta = {
+								rx = 15,
+							},
+							AlaIzq = {
+								rz = -25,
+							},
+							AlaDer = {
+								rz = 25,
+							},
+						},
+					},
+					{
+						t = 0.35,
+						pose = {},
+					},
+				},
+			},
+			Derrota = {
+				duracion = 1.3,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.25,
+						pose = {
+							Raiz = {
+								rx = 12,
+								py = 0.1,
+							},
+							Cabeza = {
+								rx = 30,
+							},
+							Cresta = {
+								rx = 20,
+							},
+							AlaIzq = {
+								rz = -50,
+							},
+							AlaDer = {
+								rz = 50,
+							},
+						},
+					},
+					{
+						t = 0.55,
+						pose = {
+							Raiz = {
+								rx = 5,
+								rz = -10,
+							},
+							Cabeza = {
+								rx = -20,
+								ry = 20,
+							},
+							AlaIzq = {
+								rz = -30,
+							},
+							AlaDer = {
+								rz = 30,
+							},
+						},
+					},
+					{
+						t = 1.3,
+						pose = {
+							Raiz = {
+								rz = -85,
+								py = -2.25,
+							},
+							Cabeza = {
+								rx = -25,
+								rz = -20,
+							},
+							Cresta = {
+								rx = 15,
+							},
+							AlaIzq = {
+								rz = -35,
+							},
+							AlaDer = {
+								rz = -10,
+							},
+							PataIzq = {
+								rx = 25,
+							},
+							PataDer = {
+								rx = -15,
+							},
+							Cola1 = {
+								rx = 15,
+							},
+						},
+					},
+				},
+			},
+		},
+	},
+}
+]]></ProtectedString>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="17">
+          <Properties>
+            <string name="Name">GalloSamurai</string>
+            <ProtectedString name="Source"><![CDATA[-- Generado por herramientas/criaturas/generar.py. No lo edites a mano: cambia el archivo
+-- herramientas/criaturas/gallosamurai.py y vuelve a generar.
+return {
+	nombre = "Gallo Samurái",
+	vida = 320,
+	velocidad = 18,
+	comportamiento = "normal",
+	radioDeteccion = 40,
+	radioPatrulla = 18,
+	radioPersecucion = 75,
+	reaparecer = 30,
+	colorUI = Color3.fromRGB(215, 30, 35),
+	habilidades = {
+		{
+			nombre = "Corte Veloz",
+			tipo = "Golpe",
+			anim = "CorteVeloz",
+			rango = 8,
+			cooldown = 2.5,
+			retraso = 0.3,
+			danio = 18,
+			alcance = 9,
+			angulo = 120,
+			empuje = 35,
+			color = Color3.fromRGB(225, 235, 255),
+		},
+		{
+			nombre = "Tajo Giratorio",
+			tipo = "Onda",
+			anim = "TajoGiratorio",
+			rango = 10,
+			cooldown = 8,
+			retraso = 0.45,
+			danio = 22,
+			radio = 12,
+			empuje = 55,
+			color = Color3.fromRGB(210, 225, 255),
+		},
+		{
+			nombre = "Defensa de Acero",
+			tipo = "Escudo",
+			anim = "DefensaAcero",
+			rango = 20,
+			cooldown = 12,
+			retraso = 0.2,
+			duracion = 3,
+			reduccion = 0.7,
+			color = Color3.fromRGB(200, 210, 230),
+		},
+	},
+	tipo = "GalloSamurai",
+	rig = {
+		marcador = 2.0,
+		suelo = -2.9148,
+		partes = {
+			Cabeza = {
+				padre = "Cuerpo",
+				union = { 0.9056, 0.1759, 1.0351 },
+			},
+			AlaIzq = {
+				padre = "Cuerpo",
+				union = { 0.3056, -0.8241, 0.9351 },
+			},
+			AlaDer = {
+				padre = "Cuerpo",
+				union = { 0.3056, 1.1759, 0.9351 },
+			},
+			PataIzq = {
+				padre = "Cuerpo",
+				union = { -0.3144, -0.3241, -0.7649 },
+			},
+			PataDer = {
+				padre = "Cuerpo",
+				union = { -0.3144, 0.6759, -0.7649 },
+			},
+			Cola = {
+				padre = "Cuerpo",
+				union = { -1.4444, 0.1759, 0.4851 },
+			},
+			Bandera = {
+				padre = "Cuerpo",
+				union = { -0.8944, 0.1759, 0.9851 },
+			},
+		},
+		adjuntos = {
+			AlaDer__Brillo_filo = "AlaDer",
+		},
+	},
+	coloresBrillo = {
+		AlaDer__Brillo_filo = Color3.fromRGB(199, 237, 255),
+	},
+	animaciones = {
+		ciclos = {
+			Idle = {
+				Raiz = {
+					{ "py", 0.04, 1.2, 0 },
+				},
+				Cabeza = {
+					{ "rx", 4, 0.6, 0 },
+					{ "ry", 10, 0.3, 0.1 },
+				},
+				AlaIzq = {
+					{ "rz", -3, 1.2, 0 },
+				},
+				AlaDer = {
+					{ "rz", 3, 1.2, 0 },
+					{ "rx", 3, 0.6, 0.25 },
+				},
+				Bandera = {
+					{ "rx", 3, 0.9, 0 },
+					{ "rz", 4, 0.6, 0.3 },
+				},
+				Cola = {
+					{ "rz", 3, 0.7, 0 },
+					{ "rx", 2, 0.9, 0.5 },
+				},
+			},
+			Caminar = {
+				Raiz = {
+					{ "py", 0.08, 5.0, 0.25 },
+					{ "rz", 3, 2.5, 0 },
+					{ "ry", 3, 2.5, 0.25 },
+				},
+				Cabeza = {
+					{ "rx", 6, 5.0, 0.0 },
+				},
+				AlaIzq = {
+					{ "rz", -5, 2.5, 0 },
+				},
+				AlaDer = {
+					{ "rz", 5, 2.5, 0.5 },
+					{ "rx", 5, 2.5, 0.25 },
+				},
+				PataIzq = {
+					{ "rx", 28, 2.5, 0 },
+				},
+				PataDer = {
+					{ "rx", 28, 2.5, 0.5 },
+				},
+				Bandera = {
+					{ "rx", 6, 2.5, 0.3 },
+					{ "rz", 5, 2.5, 0.1 },
+				},
+				Cola = {
+					{ "rx", 5, 5.0, 0.4 },
+					{ "rz", 5, 2.5, 0.2 },
+				},
+			},
+		},
+		clips = {
+			CorteVeloz = {
+				duracion = 0.75,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.15,
+						pose = {
+							Raiz = {
+								ry = -18,
+								py = -0.05,
+							},
+							AlaDer = {
+								rx = 55,
+								rz = 35,
+								ry = -15,
+							},
+							AlaIzq = {
+								rz = -10,
+							},
+							Cabeza = {
+								ry = -10,
+							},
+							Bandera = {
+								rx = -4,
+							},
+						},
+					},
+					{
+						t = 0.3,
+						pose = {
+							Raiz = {
+								ry = 20,
+								pz = -0.5,
+								rx = -8,
+							},
+							AlaDer = {
+								rx = -55,
+								rz = -10,
+								ry = 35,
+							},
+							AlaIzq = {
+								rz = -25,
+								rx = 10,
+							},
+							Cabeza = {
+								rx = -10,
+								ry = 10,
+							},
+							Bandera = {
+								rx = 8,
+							},
+							Cola = {
+								rx = -8,
+							},
+						},
+					},
+					{
+						t = 0.45,
+						pose = {
+							Raiz = {
+								ry = 24,
+								pz = -0.4,
+								rx = -6,
+							},
+							AlaDer = {
+								rx = -62,
+								rz = -15,
+								ry = 45,
+							},
+							AlaIzq = {
+								rz = -20,
+								rx = 8,
+							},
+							Cabeza = {
+								rx = -6,
+								ry = 8,
+							},
+							Bandera = {
+								rx = 5,
+							},
+							Cola = {
+								rx = -5,
+							},
+						},
+					},
+					{
+						t = 0.75,
+						pose = {},
+					},
+				},
+			},
+			TajoGiratorio = {
+				duracion = 1.0,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.2,
+						pose = {
+							Raiz = {
+								ry = 35,
+								py = -0.15,
+							},
+							AlaDer = {
+								rz = 70,
+								rx = -20,
+								ry = -10,
+							},
+							AlaIzq = {
+								rz = -50,
+							},
+							Cabeza = {
+								ry = -15,
+							},
+							Bandera = {
+								rz = -6,
+							},
+						},
+					},
+					{
+						t = 0.2,
+						pose = {
+							Raiz = {
+								ry = 395,
+								py = -0.15,
+							},
+							AlaDer = {
+								rz = 70,
+								rx = -20,
+								ry = -10,
+							},
+							AlaIzq = {
+								rz = -50,
+							},
+							Cabeza = {
+								ry = -15,
+							},
+							Bandera = {
+								rz = -6,
+							},
+						},
+					},
+					{
+						t = 0.62,
+						pose = {
+							Raiz = {
+								ry = 0,
+								py = -0.1,
+							},
+							AlaDer = {
+								rz = 70,
+								rx = -20,
+								ry = -10,
+							},
+							AlaIzq = {
+								rz = -50,
+							},
+							Cabeza = {
+								ry = 10,
+							},
+							Bandera = {
+								rz = 10,
+							},
+						},
+					},
+					{
+						t = 1.0,
+						pose = {},
+					},
+				},
+			},
+			DefensaAcero = {
+				duracion = 1.0,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.2,
+						pose = {
+							Raiz = {
+								py = -0.08,
+								rx = 4,
+							},
+							AlaDer = {
+								rx = 35,
+								ry = 40,
+								rz = 10,
+							},
+							AlaIzq = {
+								rx = 15,
+								ry = -25,
+								rz = -15,
+							},
+							Cabeza = {
+								rx = -8,
+							},
+							PataIzq = {
+								rx = -10,
+							},
+							PataDer = {
+								rx = 10,
+							},
+						},
+					},
+					{
+						t = 0.75,
+						pose = {
+							Raiz = {
+								py = -0.08,
+								rx = 4,
+							},
+							AlaDer = {
+								rx = 35,
+								ry = 40,
+								rz = 10,
+							},
+							AlaIzq = {
+								rx = 15,
+								ry = -25,
+								rz = -15,
+							},
+							Cabeza = {
+								rx = -8,
+							},
+							PataIzq = {
+								rx = -10,
+							},
+							PataDer = {
+								rx = 10,
+							},
+						},
+					},
+					{
+						t = 1.0,
+						pose = {},
+					},
+				},
+			},
+			Golpeado = {
+				duracion = 0.4,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.1,
+						pose = {
+							Raiz = {
+								rx = 8,
+								pz = 0.25,
+							},
+							Cabeza = {
+								rx = 15,
+							},
+							AlaIzq = {
+								rz = -15,
+							},
+							AlaDer = {
+								rz = 10,
+							},
+						},
+					},
+					{
+						t = 0.4,
+						pose = {},
+					},
+				},
+			},
+			Derrota = {
+				duracion = 1.2,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.35,
+						pose = {
+							Raiz = {
+								py = -0.2,
+								rx = -12,
+							},
+							Cabeza = {
+								rx = -20,
+							},
+							AlaDer = {
+								rx = -40,
+								rz = -10,
+							},
+							AlaIzq = {
+								rz = 10,
+							},
+							PataIzq = {
+								rx = -20,
+							},
+							PataDer = {
+								rx = -20,
+							},
+						},
+					},
+					{
+						t = 1.2,
+						pose = {
+							Raiz = {
+								py = -1.55,
+								rz = 82,
+								rx = -8,
+							},
+							Cabeza = {
+								rx = 25,
+								rz = -20,
+							},
+							AlaDer = {
+								rz = 45,
+								rx = -20,
+							},
+							AlaIzq = {
+								rz = 15,
+							},
+							PataIzq = {
+								rx = -30,
+							},
+							PataDer = {
+								rx = 15,
+							},
+							Bandera = {
+								rz = -15,
+							},
+							Cola = {
+								rz = -10,
+							},
+						},
+					},
+				},
+			},
+		},
+	},
+}
+]]></ProtectedString>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="18">
+          <Properties>
+            <string name="Name">PollitoBomba</string>
+            <ProtectedString name="Source"><![CDATA[-- Generado por herramientas/criaturas/generar.py. No lo edites a mano: cambia el archivo
+-- herramientas/criaturas/pollitobomba.py y vuelve a generar.
+return {
+	nombre = "Pollito Bomba",
+	vida = 30,
+	velocidad = 24,
+	comportamiento = "kamikaze",
+	radioDeteccion = 45,
+	radioPatrulla = 10,
+	radioPersecucion = 90,
+	reaparecer = 0,
+	colorUI = Color3.fromRGB(255, 200, 40),
+	habilidades = {
+		{
+			nombre = "¡Kabum!",
+			tipo = "Explotar",
+			anim = "Explotar",
+			rango = 5,
+			cooldown = 0,
+			retraso = 1.1,
+			radio = 11,
+			danio = 25,
+			empuje = 70,
+			color = Color3.fromRGB(255, 150, 30),
+		},
+	},
+	tipo = "PollitoBomba",
+	rig = {
+		marcador = 2.0,
+		suelo = -0.9996,
+		partes = {
+			Cabeza = {
+				padre = "Cuerpo",
+				union = { 0.2836, -0.0, 0.4 },
+			},
+			Mecha = {
+				padre = "Cabeza",
+				union = { 0.3836, -0.0, 1.3 },
+			},
+			AlaIzq = {
+				padre = "Cuerpo",
+				union = { 0.0836, -0.62, 0.25 },
+			},
+			AlaDer = {
+				padre = "Cuerpo",
+				union = { 0.0836, 0.62, 0.25 },
+			},
+			PataIzq = {
+				padre = "Cuerpo",
+				union = { 0.0836, -0.25, -0.4 },
+			},
+			PataDer = {
+				padre = "Cuerpo",
+				union = { 0.0836, 0.25, -0.4 },
+			},
+		},
+		adjuntos = {
+			Mecha__Brillo_chispa = "Mecha",
+			Mecha__Brillo_amarillo = "Mecha",
+		},
+	},
+	coloresBrillo = {
+		Mecha__Brillo_chispa = Color3.fromRGB(255, 191, 38),
+		Mecha__Brillo_amarillo = Color3.fromRGB(255, 209, 51),
+	},
+	animaciones = {
+		ciclos = {
+			Idle = {
+				Raiz = {
+					{ "py", 0.05, 2.0, 0 },
+				},
+				Cabeza = {
+					{ "rx", 6, 1.0, 0 },
+					{ "ry", 8, 0.4, 0.2 },
+				},
+				Mecha = {
+					{ "rz", 12, 3.0, 0 },
+					{ "rx", 8, 2.3, 0.3 },
+				},
+				AlaIzq = {
+					{ "rz", -10, 2.0, 0 },
+				},
+				AlaDer = {
+					{ "rz", 10, 2.0, 0 },
+				},
+			},
+			Caminar = {
+				Raiz = {
+					{ "rz", 9, 3.0, 0 },
+					{ "py", 0.08, 6.0, 0 },
+				},
+				Cabeza = {
+					{ "rx", 7, 6.0, 0.25 },
+				},
+				Mecha = {
+					{ "rz", 18, 6.0, 0 },
+				},
+				AlaIzq = {
+					{ "rz", -30, 8.0, 0 },
+				},
+				PataIzq = {
+					{ "rx", 35, 3.0, 0 },
+				},
+				PataDer = {
+					{ "rx", 35, 3.0, 0.5 },
+				},
+				AlaDer = {
+					{ "rz", 30, 8.0, 0 },
+				},
+			},
+		},
+		clips = {
+			Explotar = {
+				duracion = 1.1,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.25,
+						pose = {
+							Raiz = {
+								py = 0.15,
+								rx = -12,
+							},
+							AlaIzq = {
+								rz = -50,
+							},
+							AlaDer = {
+								rz = 50,
+							},
+						},
+					},
+					{
+						t = 0.5,
+						pose = {
+							Raiz = {
+								py = -0.1,
+								rx = 6,
+							},
+							Cabeza = {
+								rx = 12,
+							},
+							AlaIzq = {
+								rz = 10,
+							},
+							AlaDer = {
+								rz = -10,
+							},
+						},
+					},
+					{
+						t = 0.8,
+						pose = {
+							Raiz = {
+								py = 0.35,
+								rx = -8,
+							},
+							AlaIzq = {
+								rz = -70,
+							},
+							Mecha = {
+								rz = 30,
+							},
+							AlaDer = {
+								rz = 70,
+							},
+						},
+					},
+					{
+						t = 1.1,
+						pose = {
+							Raiz = {
+								py = 0.5,
+							},
+							AlaIzq = {
+								rz = -80,
+							},
+							Cabeza = {
+								rx = 20,
+							},
+							Mecha = {
+								rz = -30,
+							},
+							AlaDer = {
+								rz = 80,
+							},
+						},
+					},
+				},
+			},
+			Derrota = {
+				duracion = 0.8,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.3,
+						pose = {
+							Raiz = {
+								py = 0.3,
+								rz = 30,
+							},
+						},
+					},
+					{
+						t = 0.8,
+						pose = {
+							Raiz = {
+								py = -0.25,
+								rz = 90,
+							},
+							AlaIzq = {
+								rz = -40,
+							},
+							PataIzq = {
+								rx = 40,
+							},
+							AlaDer = {
+								rz = 40,
+							},
+							PataDer = {
+								rx = 40,
+							},
+						},
+					},
+				},
+			},
+		},
+	},
+}
+]]></ProtectedString>
+          </Properties>
+        </Item>
+      </Item>
+    </Item>
+  </Item>
+</roblox>

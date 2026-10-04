@@ -1,0 +1,5 @@
+std = "roblox_minimo"
+
+[rules]
+# Los modulos devuelven tablas con campos dinamicos; estas reglas dan falsos positivos aqui.
+mixed_table = "allow"
