@@ -323,7 +323,7 @@ ANIMACIONES = {
         "Cresta": [("rz", 4, 3.5, 0), ("rx", 3, 2.1, 0.3)],
         "AlaIzq": [("rz", -4, 1.2, 0)],
         "Cola1": [("rx", 3, 0.6, 0.2), ("ry", 3, 0.4, 0)],
-        "Cola2": [("rx", 5, 0.6, 0.4), ("ry", 4, 0.4, 0.25)],
+        "Cola2": [("rx", 5, 0.6, 0.4), ("ry", 4, 0.4, 0.25), ("rz", 2.5, 4.5, 0)],  # chisporroteo
     },
     "Caminar": {
         "Raiz": [("py", 0.15, 5.2, 0.25), ("rz", 3, 2.6, 0)],
@@ -350,12 +350,14 @@ ANIMACIONES = {
         # Descarga al tiempo 0.4: alza alas y cresta
         "RayoEncadenado": {"duracion": 1.1, "claves": [
             (0.0, {}),
-            (0.28, {"Raiz": {"py": -0.1, "rx": -6}, "Cabeza": {"rx": -12}, "Cresta": {"rx": -12},
-                    "AlaIzq": {"rz": -40}, "Cola1": {"rx": 6}}),
-            (0.4, {"Raiz": {"py": 0.35, "rx": 10}, "Cabeza": {"rx": 22}, "Cresta": {"rx": 20},
-                   "AlaIzq": {"rz": -80, "ry": -15}, "Cola1": {"rx": -15}, "Cola2": {"rx": -10}}),
-            (0.65, {"Raiz": {"py": 0.25, "rx": 8}, "Cabeza": {"rx": 16}, "Cresta": {"rx": 14},
-                    "AlaIzq": {"rz": -70, "ry": -12}, "Cola1": {"rx": -12}, "Cola2": {"rx": 6}}),
+            (0.25, {"Raiz": {"py": -0.08, "rx": -8}, "Cabeza": {"rx": -15}, "Cresta": {"rx": -12},
+                    "AlaIzq": {"rz": -25, "ry": -10}, "Cola1": {"rx": 6}}),
+            (0.4, {"Raiz": {"py": 0.35, "rx": 8}, "Cabeza": {"rx": 22}, "Cresta": {"rx": 18},
+                   "AlaIzq": {"rx": -68, "ry": -35, "rz": -45}, "Cola1": {"rx": -15}, "Cola2": {"rx": -10},
+                   "PataIzq": {"rx": 8}, "PataDer": {"rx": 8}}),
+            (0.65, {"Raiz": {"py": 0.25, "rx": 6}, "Cabeza": {"rx": 15}, "Cresta": {"rx": 12},
+                    "AlaIzq": {"rx": -60, "ry": -30, "rz": -40}, "Cola1": {"rx": -12}, "Cola2": {"rx": 6},
+                    "PataIzq": {"rx": 5}, "PataDer": {"rx": 5}}),
             (1.1, {}),
         ]},
         # Se lanza al tiempo 0.3

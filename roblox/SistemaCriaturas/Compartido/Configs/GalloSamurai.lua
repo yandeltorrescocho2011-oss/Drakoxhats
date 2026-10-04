@@ -51,35 +51,35 @@ return {
 	tipo = "GalloSamurai",
 	rig = {
 		marcador = 2.0,
-		suelo = -2.9148,
+		suelo = -3.0944,
 		partes = {
 			Cabeza = {
 				padre = "Cuerpo",
-				union = { 0.9056, 0.1759, 1.0351 },
+				union = { 1.0589, 0.1672, 1.2055 },
 			},
 			AlaIzq = {
 				padre = "Cuerpo",
-				union = { 0.3056, -0.8241, 0.9351 },
+				union = { 0.4589, -0.8328, 1.1055 },
 			},
 			AlaDer = {
 				padre = "Cuerpo",
-				union = { 0.3056, 1.1759, 0.9351 },
+				union = { 0.4589, 1.1672, 1.1055 },
 			},
 			PataIzq = {
 				padre = "Cuerpo",
-				union = { -0.3144, -0.3241, -0.7649 },
+				union = { -0.1611, -0.3328, -0.6445 },
 			},
 			PataDer = {
 				padre = "Cuerpo",
-				union = { -0.3144, 0.6759, -0.7649 },
+				union = { -0.1611, 0.6672, -0.6445 },
 			},
 			Cola = {
 				padre = "Cuerpo",
-				union = { -1.4444, 0.1759, 0.4851 },
+				union = { -1.2411, 0.1672, 0.6555 },
 			},
 			Bandera = {
 				padre = "Cuerpo",
-				union = { -0.8944, 0.1759, 0.9851 },
+				union = { -0.7411, 0.1672, 1.1555 },
 			},
 		},
 		adjuntos = {
@@ -159,22 +159,27 @@ return {
 						t = 0.15,
 						pose = {
 							Raiz = {
-								ry = -18,
-								py = -0.05,
+								ry = -20,
+								rx = 3,
 							},
 							AlaDer = {
 								rx = 55,
-								rz = 35,
-								ry = -15,
+								rz = 30,
+								ry = -10,
 							},
 							AlaIzq = {
-								rz = -10,
+								rz = -12,
+								rx = 5,
 							},
 							Cabeza = {
-								ry = -10,
+								ry = -8,
+								rx = 5,
 							},
 							Bandera = {
 								rx = -4,
+							},
+							Cola = {
+								rx = 4,
 							},
 						},
 					},
@@ -182,27 +187,34 @@ return {
 						t = 0.3,
 						pose = {
 							Raiz = {
-								ry = 20,
-								pz = -0.5,
+								ry = 22,
+								pz = -0.55,
 								rx = -8,
+								py = 0.02,
 							},
 							AlaDer = {
-								rx = -55,
-								rz = -10,
-								ry = 35,
+								rx = -42,
+								ry = 25,
+								rz = 8,
 							},
 							AlaIzq = {
-								rz = -25,
-								rx = 10,
+								rz = -28,
+								rx = -10,
 							},
 							Cabeza = {
-								rx = -10,
-								ry = 10,
+								rx = -8,
+								ry = 6,
 							},
 							Bandera = {
-								rx = 8,
+								rx = 9,
 							},
 							Cola = {
+								rx = -8,
+							},
+							PataIzq = {
+								rx = 10,
+							},
+							PataDer = {
 								rx = -8,
 							},
 						},
@@ -211,28 +223,35 @@ return {
 						t = 0.45,
 						pose = {
 							Raiz = {
-								ry = 24,
-								pz = -0.4,
+								ry = 26,
+								pz = -0.45,
 								rx = -6,
+								py = 0.02,
 							},
 							AlaDer = {
-								rx = -62,
-								rz = -15,
-								ry = 45,
+								rx = -52,
+								ry = 28,
+								rz = 5,
 							},
 							AlaIzq = {
-								rz = -20,
-								rx = 8,
+								rz = -22,
+								rx = -6,
 							},
 							Cabeza = {
-								rx = -6,
-								ry = 8,
+								rx = -5,
+								ry = 6,
 							},
 							Bandera = {
 								rx = 5,
 							},
 							Cola = {
 								rx = -5,
+							},
+							PataIzq = {
+								rx = 8,
+							},
+							PataDer = {
+								rx = -7,
 							},
 						},
 					},
@@ -254,20 +273,24 @@ return {
 						pose = {
 							Raiz = {
 								ry = 35,
-								py = -0.15,
+								py = -0.03,
 							},
 							AlaDer = {
-								rz = 70,
-								rx = -20,
-								ry = -10,
+								rz = 55,
+								ry = -70,
+								rx = -50,
 							},
 							AlaIzq = {
-								rz = -50,
+								rz = -55,
+								rx = -10,
 							},
 							Cabeza = {
 								ry = -15,
 							},
 							Bandera = {
+								rz = -6,
+							},
+							Cola = {
 								rz = -6,
 							},
 						},
@@ -277,20 +300,24 @@ return {
 						pose = {
 							Raiz = {
 								ry = 395,
-								py = -0.15,
+								py = -0.03,
 							},
 							AlaDer = {
-								rz = 70,
-								rx = -20,
-								ry = -10,
+								rz = 55,
+								ry = -70,
+								rx = -50,
 							},
 							AlaIzq = {
-								rz = -50,
+								rz = -55,
+								rx = -10,
 							},
 							Cabeza = {
 								ry = -15,
 							},
 							Bandera = {
+								rz = -6,
+							},
+							Cola = {
 								rz = -6,
 							},
 						},
@@ -300,21 +327,25 @@ return {
 						pose = {
 							Raiz = {
 								ry = 0,
-								py = -0.1,
+								py = -0.02,
 							},
 							AlaDer = {
-								rz = 70,
-								rx = -20,
-								ry = -10,
+								rz = 55,
+								ry = -70,
+								rx = -50,
 							},
 							AlaIzq = {
-								rz = -50,
+								rz = -55,
+								rx = -10,
 							},
 							Cabeza = {
-								ry = 10,
+								ry = 12,
 							},
 							Bandera = {
-								rz = 10,
+								rz = 12,
+							},
+							Cola = {
+								rz = 12,
 							},
 						},
 					},
@@ -335,55 +366,57 @@ return {
 						t = 0.2,
 						pose = {
 							Raiz = {
-								py = -0.08,
-								rx = 4,
+								ry = -12,
 							},
 							AlaDer = {
-								rx = 35,
-								ry = 40,
-								rz = 10,
+								rx = 25,
+								ry = 25,
 							},
 							AlaIzq = {
-								rx = 15,
-								ry = -25,
-								rz = -15,
+								rz = -25,
+								rx = 10,
 							},
 							Cabeza = {
-								rx = -8,
+								rx = -6,
+								ry = 6,
 							},
 							PataIzq = {
-								rx = -10,
+								rx = 8,
 							},
 							PataDer = {
-								rx = 10,
+								rx = -8,
+							},
+							Bandera = {
+								rx = 4,
 							},
 						},
 					},
 					{
-						t = 0.75,
+						t = 0.8,
 						pose = {
 							Raiz = {
-								py = -0.08,
-								rx = 4,
+								ry = -12,
 							},
 							AlaDer = {
-								rx = 35,
-								ry = 40,
-								rz = 10,
+								rx = 27,
+								ry = 25,
 							},
 							AlaIzq = {
-								rx = 15,
-								ry = -25,
-								rz = -15,
+								rz = -25,
+								rx = 10,
 							},
 							Cabeza = {
-								rx = -8,
+								rx = -6,
+								ry = 6,
 							},
 							PataIzq = {
-								rx = -10,
+								rx = 8,
 							},
 							PataDer = {
-								rx = 10,
+								rx = -8,
+							},
+							Bandera = {
+								rx = 4,
 							},
 						},
 					},
@@ -416,6 +449,9 @@ return {
 							AlaDer = {
 								rz = 10,
 							},
+							Bandera = {
+								rx = -8,
+							},
 						},
 					},
 					{
@@ -435,24 +471,27 @@ return {
 						t = 0.35,
 						pose = {
 							Raiz = {
-								py = -0.2,
+								py = -0.05,
 								rx = -12,
 							},
 							Cabeza = {
 								rx = -20,
 							},
 							AlaDer = {
-								rx = -40,
-								rz = -10,
-							},
-							AlaIzq = {
+								rx = -30,
 								rz = 10,
 							},
+							AlaIzq = {
+								rz = -10,
+							},
 							PataIzq = {
-								rx = -20,
+								rx = 15,
 							},
 							PataDer = {
-								rx = -20,
+								rx = 15,
+							},
+							Bandera = {
+								rx = 8,
 							},
 						},
 					},
@@ -460,7 +499,7 @@ return {
 						t = 1.2,
 						pose = {
 							Raiz = {
-								py = -1.55,
+								py = -1.36,
 								rz = 82,
 								rx = -8,
 							},
@@ -473,13 +512,13 @@ return {
 								rx = -20,
 							},
 							AlaIzq = {
-								rz = 15,
+								rz = -20,
 							},
 							PataIzq = {
-								rx = -30,
+								rx = 30,
 							},
 							PataDer = {
-								rx = 15,
+								rx = -15,
 							},
 							Bandera = {
 								rz = -15,

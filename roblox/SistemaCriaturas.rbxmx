@@ -2235,6 +2235,1925 @@ return Animacion
         </Properties>
         <Item class="ModuleScript" referent="16">
           <Properties>
+            <string name="Name">GalloCatrin</string>
+            <ProtectedString name="Source"><![CDATA[-- Generado por herramientas/criaturas/generar.py. No lo edites a mano: cambia el archivo
+-- herramientas/criaturas/gallocatrin.py y vuelve a generar.
+return {
+	nombre = "Gallo Catrín",
+	vida = 240,
+	velocidad = 20,
+	comportamiento = "normal",
+	radioDeteccion = 38,
+	radioPatrulla = 16,
+	radioPersecucion = 75,
+	reaparecer = 25,
+	colorUI = Color3.fromRGB(170, 80, 255),
+	habilidades = {
+		{
+			nombre = "Picotazo de Hueso",
+			tipo = "Golpe",
+			anim = "PicotazoHueso",
+			rango = 6,
+			cooldown = 1.8,
+			retraso = 0.2,
+			danio = 10,
+			alcance = 6,
+			angulo = 90,
+			empuje = 20,
+			color = Color3.fromRGB(245, 235, 215),
+		},
+		{
+			nombre = "Huesos Malditos",
+			tipo = "Proyectil",
+			anim = "HuesosMalditos",
+			rango = 35,
+			cooldown = 4,
+			retraso = 0.35,
+			danio = 12,
+			cantidad = 3,
+			dispersion = 20,
+			velocidad = 60,
+			forma = "hueso",
+			tamano = 1,
+			radioExplosion = 0,
+			color = Color3.fromRGB(180, 80, 255),
+		},
+		{
+			nombre = "Forma Fantasma",
+			tipo = "Fantasma",
+			anim = "FormaFantasma",
+			rango = 40,
+			cooldown = 14,
+			retraso = 0.3,
+			duracion = 3,
+			velocidadExtra = 1.6,
+			color = Color3.fromRGB(150, 110, 255),
+		},
+		{
+			nombre = "Grito del Más Allá",
+			tipo = "Onda",
+			anim = "GritoMasAlla",
+			rango = 10,
+			cooldown = 10,
+			retraso = 0.5,
+			danio = 10,
+			radio = 14,
+			empuje = 30,
+			aturdir = 1.5,
+			color = Color3.fromRGB(60, 240, 220),
+		},
+	},
+	tipo = "GalloCatrin",
+	rig = {
+		marcador = 2.0,
+		suelo = -3.0974,
+		partes = {
+			Cabeza = {
+				padre = "Cuerpo",
+				union = { 0.7872, -0.0, 0.6726 },
+			},
+			Mandibula = {
+				padre = "Cabeza",
+				union = { 1.7372, -0.0, 1.4426 },
+			},
+			Sombrero = {
+				padre = "Cabeza",
+				union = { 1.2372, -0.0, 2.1926 },
+			},
+			AlaIzq = {
+				padre = "Cuerpo",
+				union = { 0.5872, -0.8, 0.3126 },
+			},
+			AlaDer = {
+				padre = "Cuerpo",
+				union = { 0.5872, 0.8, 0.3126 },
+			},
+			PataIzq = {
+				padre = "Cuerpo",
+				union = { -0.1128, -0.42, -0.9074 },
+			},
+			PataDer = {
+				padre = "Cuerpo",
+				union = { -0.1128, 0.42, -0.9074 },
+			},
+			Cola = {
+				padre = "Cuerpo",
+				union = { -1.0628, -0.0, 0.3426 },
+			},
+		},
+		adjuntos = {
+			Cuerpo__Brillo_alma_morada = "Cuerpo",
+			Cabeza__Brillo_alma_morada = "Cabeza",
+			Cola__Brillo_alma_turquesa = "Cola",
+			Cola__Brillo_alma_morada = "Cola",
+			Cola__Vidrio = "Cola",
+		},
+	},
+	coloresBrillo = {
+		Cuerpo__Brillo_alma_morada = Color3.fromRGB(204, 97, 255),
+		Cabeza__Brillo_alma_morada = Color3.fromRGB(204, 97, 255),
+		Cola__Brillo_alma_turquesa = Color3.fromRGB(64, 255, 224),
+		Cola__Brillo_alma_morada = Color3.fromRGB(204, 97, 255),
+	},
+	animaciones = {
+		ciclos = {
+			Idle = {
+				Raiz = {
+					{ "py", 0.05, 0.8, 0 },
+					{ "rz", 1.5, 0.4, 0.2 },
+				},
+				Cabeza = {
+					{ "rx", 4, 0.8, 0.1 },
+					{ "ry", 9, 0.3, 0 },
+				},
+				Mandibula = {
+					{ "rx", 2, 0.8, 0.6 },
+				},
+				Sombrero = {
+					{ "rz", 2, 0.4, 0.5 },
+				},
+				AlaIzq = {
+					{ "rz", -4, 0.8, 0 },
+				},
+				Cola = {
+					{ "rz", 4, 0.5, 0 },
+					{ "rx", 3, 0.8, 0.3 },
+				},
+				AlaDer = {
+					{ "rz", 4, 0.8, 0 },
+				},
+			},
+			Caminar = {
+				Raiz = {
+					{ "py", 0.08, 5.0, 0.25 },
+					{ "rz", 3, 2.5, 0 },
+					{ "ry", 4, 2.5, 0.25 },
+				},
+				Cabeza = {
+					{ "rx", 7, 5.0, 0.0 },
+					{ "pz", 0.08, 5.0, 0.25 },
+				},
+				Sombrero = {
+					{ "rx", 3, 5.0, 0.1 },
+				},
+				AlaIzq = {
+					{ "rz", -6, 2.5, 0 },
+				},
+				PataIzq = {
+					{ "rx", 30, 2.5, 0 },
+				},
+				PataDer = {
+					{ "rx", 30, 2.5, 0.5 },
+				},
+				Cola = {
+					{ "rz", 6, 2.5, 0.2 },
+					{ "rx", 4, 5.0, 0.4 },
+				},
+				AlaDer = {
+					{ "rz", 6, 2.5, 0 },
+				},
+			},
+		},
+		clips = {
+			PicotazoHueso = {
+				duracion = 0.6,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.1,
+						pose = {
+							Raiz = {
+								rx = 5,
+								pz = 0.15,
+							},
+							Cabeza = {
+								rx = 12,
+								pz = 0.1,
+							},
+							Mandibula = {
+								rx = -32,
+							},
+							Sombrero = {
+								rx = -3,
+							},
+							AlaIzq = {
+								rz = -15,
+							},
+							Cola = {
+								rx = 4,
+							},
+							AlaDer = {
+								rz = 15,
+							},
+						},
+					},
+					{
+						t = 0.2,
+						pose = {
+							Raiz = {
+								rx = -8,
+								pz = -0.4,
+								py = -0.05,
+							},
+							Cabeza = {
+								rx = -20,
+								pz = -0.3,
+								py = -0.08,
+							},
+							Mandibula = {
+								rx = 0,
+							},
+							Sombrero = {
+								rx = 6,
+							},
+							AlaIzq = {
+								rz = -28,
+								rx = -10,
+							},
+							Cola = {
+								rx = -8,
+							},
+							PataIzq = {
+								rx = 10,
+							},
+							PataDer = {
+								rx = -10,
+							},
+							AlaDer = {
+								rz = 28,
+								rx = -10,
+							},
+						},
+					},
+					{
+						t = 0.32,
+						pose = {
+							Raiz = {
+								rx = -6,
+								pz = -0.35,
+								py = -0.04,
+							},
+							Cabeza = {
+								rx = -15,
+								pz = -0.25,
+								py = -0.06,
+							},
+							Sombrero = {
+								rx = 4,
+							},
+							AlaIzq = {
+								rz = -20,
+								rx = -6,
+							},
+							Cola = {
+								rx = -6,
+							},
+							PataIzq = {
+								rx = 8,
+							},
+							PataDer = {
+								rx = -8,
+							},
+							AlaDer = {
+								rz = 20,
+								rx = -6,
+							},
+						},
+					},
+					{
+						t = 0.6,
+						pose = {},
+					},
+				},
+			},
+			HuesosMalditos = {
+				duracion = 0.8,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.2,
+						pose = {
+							Raiz = {
+								rx = 8,
+								pz = 0.2,
+								py = 0.05,
+							},
+							Cabeza = {
+								rx = 10,
+							},
+							Mandibula = {
+								rx = -12,
+							},
+							AlaIzq = {
+								rz = -100,
+								ry = 15,
+								rx = 15,
+							},
+							Cola = {
+								rx = -10,
+							},
+							Sombrero = {
+								rx = -4,
+							},
+							AlaDer = {
+								rz = 100,
+								ry = -15,
+								rx = 15,
+							},
+						},
+					},
+					{
+						t = 0.35,
+						pose = {
+							Raiz = {
+								rx = -9,
+								pz = -0.35,
+							},
+							Cabeza = {
+								rx = -12,
+								pz = -0.1,
+							},
+							Mandibula = {
+								rx = -34,
+							},
+							AlaIzq = {
+								rz = -20,
+								ry = -85,
+								rx = -20,
+							},
+							Cola = {
+								rx = 8,
+							},
+							Sombrero = {
+								rx = 7,
+							},
+							PataIzq = {
+								rx = 8,
+							},
+							PataDer = {
+								rx = -8,
+							},
+							AlaDer = {
+								rz = 20,
+								ry = 85,
+								rx = -20,
+							},
+						},
+					},
+					{
+						t = 0.5,
+						pose = {
+							Raiz = {
+								rx = -7,
+								pz = -0.3,
+							},
+							Cabeza = {
+								rx = -9,
+								pz = -0.08,
+							},
+							Mandibula = {
+								rx = -22,
+							},
+							AlaIzq = {
+								rz = -15,
+								ry = -72,
+								rx = -14,
+							},
+							Cola = {
+								rx = 5,
+							},
+							Sombrero = {
+								rx = 4,
+							},
+							PataIzq = {
+								rx = 6,
+							},
+							PataDer = {
+								rx = -6,
+							},
+							AlaDer = {
+								rz = 15,
+								ry = 72,
+								rx = -14,
+							},
+						},
+					},
+					{
+						t = 0.8,
+						pose = {},
+					},
+				},
+			},
+			FormaFantasma = {
+				duracion = 0.9,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.15,
+						pose = {
+							Raiz = {
+								py = -0.25,
+								rx = -6,
+							},
+							Cabeza = {
+								rx = -22,
+							},
+							Sombrero = {
+								rx = -10,
+							},
+							AlaIzq = {
+								ry = 18,
+								rz = 8,
+							},
+							Cola = {
+								rx = 12,
+							},
+							PataIzq = {
+								rx = -8,
+							},
+							PataDer = {
+								rx = -8,
+							},
+							AlaDer = {
+								ry = -18,
+								rz = -8,
+							},
+						},
+					},
+					{
+						t = 0.3,
+						pose = {
+							Raiz = {
+								py = 0.45,
+								rx = 4,
+							},
+							Cabeza = {
+								rx = 20,
+							},
+							Mandibula = {
+								rx = -30,
+							},
+							Sombrero = {
+								py = 0.15,
+								rx = 8,
+							},
+							AlaIzq = {
+								rz = -70,
+								ry = -10,
+							},
+							Cola = {
+								rx = -25,
+							},
+							PataIzq = {
+								rx = 20,
+							},
+							PataDer = {
+								rx = 20,
+							},
+							AlaDer = {
+								rz = 70,
+								ry = 10,
+							},
+						},
+					},
+					{
+						t = 0.65,
+						pose = {
+							Raiz = {
+								py = 0.4,
+								ry = 360,
+							},
+							Cabeza = {
+								rx = 10,
+							},
+							Mandibula = {
+								rx = -15,
+							},
+							Sombrero = {
+								py = 0.05,
+							},
+							AlaIzq = {
+								rz = -55,
+							},
+							Cola = {
+								rx = -15,
+							},
+							PataIzq = {
+								rx = 15,
+							},
+							PataDer = {
+								rx = 15,
+							},
+							AlaDer = {
+								rz = 55,
+							},
+						},
+					},
+					{
+						t = 0.65,
+						pose = {
+							Raiz = {
+								py = 0.4,
+								ry = 0,
+							},
+							Cabeza = {
+								rx = 10,
+							},
+							Mandibula = {
+								rx = -15,
+							},
+							Sombrero = {
+								py = 0.05,
+							},
+							AlaIzq = {
+								rz = -55,
+							},
+							Cola = {
+								rx = -15,
+							},
+							PataIzq = {
+								rx = 15,
+							},
+							PataDer = {
+								rx = 15,
+							},
+							AlaDer = {
+								rz = 55,
+							},
+						},
+					},
+					{
+						t = 0.9,
+						pose = {},
+					},
+				},
+			},
+			GritoMasAlla = {
+				duracion = 1.15,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.3,
+						pose = {
+							Raiz = {
+								rx = 12,
+								pz = 0.15,
+								py = 0.08,
+							},
+							Cabeza = {
+								rx = 28,
+							},
+							Mandibula = {
+								rx = -10,
+							},
+							AlaIzq = {
+								rz = -35,
+								rx = 8,
+							},
+							Cola = {
+								rx = -12,
+							},
+							Sombrero = {
+								rx = -6,
+							},
+							AlaDer = {
+								rz = 35,
+								rx = 8,
+							},
+						},
+					},
+					{
+						t = 0.5,
+						pose = {
+							Raiz = {
+								rx = -7,
+								pz = -0.25,
+								py = -0.12,
+							},
+							Cabeza = {
+								rx = 6,
+								pz = -0.2,
+							},
+							Mandibula = {
+								rx = -50,
+							},
+							AlaIzq = {
+								rz = -75,
+								ry = -25,
+							},
+							Cola = {
+								rx = -22,
+							},
+							Sombrero = {
+								py = 0.35,
+								rx = 18,
+							},
+							PataIzq = {
+								rx = 8,
+							},
+							PataDer = {
+								rx = -8,
+							},
+							AlaDer = {
+								rz = 75,
+								ry = 25,
+							},
+						},
+					},
+					{
+						t = 0.62,
+						pose = {
+							Raiz = {
+								rx = -7,
+								pz = -0.25,
+								py = -0.12,
+							},
+							Cabeza = {
+								rx = 6,
+								ry = 7,
+								pz = -0.2,
+							},
+							Mandibula = {
+								rx = -45,
+							},
+							AlaIzq = {
+								rz = -72,
+								ry = -25,
+							},
+							Cola = {
+								rx = -22,
+							},
+							Sombrero = {
+								py = 0.45,
+								rx = 22,
+							},
+							PataIzq = {
+								rx = 8,
+							},
+							PataDer = {
+								rx = -8,
+							},
+							AlaDer = {
+								rz = 72,
+								ry = 25,
+							},
+						},
+					},
+					{
+						t = 0.74,
+						pose = {
+							Raiz = {
+								rx = -6,
+								pz = -0.22,
+								py = -0.1,
+							},
+							Cabeza = {
+								rx = 6,
+								ry = -7,
+								pz = -0.2,
+							},
+							Mandibula = {
+								rx = -45,
+							},
+							AlaIzq = {
+								rz = -70,
+								ry = -22,
+							},
+							Cola = {
+								rx = -20,
+							},
+							Sombrero = {
+								py = 0.4,
+								rx = 18,
+							},
+							PataIzq = {
+								rx = 8,
+							},
+							PataDer = {
+								rx = -8,
+							},
+							AlaDer = {
+								rz = 70,
+								ry = 22,
+							},
+						},
+					},
+					{
+						t = 0.86,
+						pose = {
+							Raiz = {
+								rx = -4,
+								pz = -0.15,
+								py = -0.06,
+							},
+							Cabeza = {
+								rx = 4,
+								ry = 5,
+								pz = -0.12,
+							},
+							Mandibula = {
+								rx = -35,
+							},
+							AlaIzq = {
+								rz = -50,
+								ry = -15,
+							},
+							Cola = {
+								rx = -12,
+							},
+							Sombrero = {
+								py = 0.15,
+								rx = 8,
+							},
+							PataIzq = {
+								rx = 5,
+							},
+							PataDer = {
+								rx = -5,
+							},
+							AlaDer = {
+								rz = 50,
+								ry = 15,
+							},
+						},
+					},
+					{
+						t = 1.15,
+						pose = {},
+					},
+				},
+			},
+			Golpeado = {
+				duracion = 0.4,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.1,
+						pose = {
+							Raiz = {
+								rx = 8,
+								pz = 0.25,
+							},
+							Cabeza = {
+								rx = 16,
+								rz = 8,
+							},
+							Mandibula = {
+								rx = -20,
+							},
+							Sombrero = {
+								py = 0.15,
+								rz = -10,
+							},
+							AlaIzq = {
+								rz = -18,
+							},
+							AlaDer = {
+								rz = 18,
+							},
+						},
+					},
+					{
+						t = 0.4,
+						pose = {},
+					},
+				},
+			},
+			Derrota = {
+				duracion = 1.5,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.3,
+						pose = {
+							Raiz = {
+								py = 0.15,
+								rx = 6,
+							},
+							Cabeza = {
+								rx = 15,
+								ry = 10,
+							},
+							Mandibula = {
+								rx = -35,
+							},
+							Sombrero = {
+								py = 0.5,
+								rx = -10,
+								rz = 12,
+							},
+							AlaIzq = {
+								rz = -45,
+							},
+							Cola = {
+								rx = -10,
+							},
+							PataIzq = {
+								rx = -5,
+							},
+							PataDer = {
+								rx = -5,
+							},
+							AlaDer = {
+								rz = 45,
+							},
+						},
+					},
+					{
+						t = 0.8,
+						pose = {
+							Raiz = {
+								py = -1.0,
+								rx = -6,
+								rz = 5,
+							},
+							Cabeza = {
+								rx = -20,
+								rz = 10,
+							},
+							Mandibula = {
+								rx = -25,
+							},
+							AlaIzq = {
+								rz = 15,
+							},
+							PataIzq = {
+								rz = -45,
+								rx = -15,
+							},
+							PataDer = {
+								rz = 45,
+								rx = -15,
+							},
+							Cola = {
+								rx = 10,
+							},
+							Sombrero = {
+								rx = -63.2,
+								ry = 18.9,
+								rz = 83.0,
+								px = 2.24,
+								py = 0.07,
+								pz = 0.66,
+							},
+							AlaDer = {
+								rz = -15,
+							},
+						},
+					},
+					{
+						t = 1.5,
+						pose = {
+							Raiz = {
+								py = -1.95,
+								rx = -10,
+								rz = 8,
+							},
+							Cabeza = {
+								rx = -10,
+								ry = 32,
+								rz = 10,
+								py = -1.92,
+								pz = -0.6,
+							},
+							Mandibula = {
+								rx = -30,
+							},
+							AlaIzq = {
+								rz = 30,
+								ry = 10,
+							},
+							PataIzq = {
+								rz = -84,
+								rx = -10,
+							},
+							PataDer = {
+								rz = 84,
+								rx = -10,
+							},
+							Cola = {
+								rx = 20,
+								rz = 12,
+							},
+							Sombrero = {
+								rx = 0.4,
+								ry = 2.1,
+								rz = -12.2,
+								px = 1.87,
+								py = -1.5,
+								pz = 1.06,
+							},
+							AlaDer = {
+								rz = -30,
+								ry = -10,
+							},
+						},
+					},
+				},
+			},
+		},
+	},
+}
+]]></ProtectedString>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="17">
+          <Properties>
+            <string name="Name">GalloQuetzal</string>
+            <ProtectedString name="Source"><![CDATA[-- Generado por herramientas/criaturas/generar.py. No lo edites a mano: cambia el archivo
+-- herramientas/criaturas/galloquetzal.py y vuelve a generar.
+return {
+	nombre = "Gallo Quetzal",
+	vida = 900,
+	velocidad = 16,
+	comportamiento = "normal",
+	radioDeteccion = 50,
+	radioPatrulla = 20,
+	radioPersecucion = 100,
+	reaparecer = 120,
+	colorUI = Color3.fromRGB(60, 215, 140),
+	habilidades = {
+		{
+			nombre = "Mordida de Serpiente",
+			tipo = "Golpe",
+			anim = "MordidaSerpiente",
+			rango = 9,
+			alcance = 10,
+			angulo = 140,
+			danio = 22,
+			empuje = 35,
+			cooldown = 3,
+			retraso = 0.35,
+			color = Color3.fromRGB(80, 240, 150),
+		},
+		{
+			nombre = "Lluvia de Plumas",
+			tipo = "Proyectil",
+			anim = "LluviaPlumas",
+			rango = 45,
+			cantidad = 7,
+			dispersion = 50,
+			forma = "pluma",
+			velocidad = 70,
+			tamano = 1.3,
+			radioExplosion = 0,
+			danio = 10,
+			cooldown = 6,
+			retraso = 0.4,
+			color = Color3.fromRGB(40, 220, 110),
+		},
+		{
+			nombre = "Viento Divino",
+			tipo = "Onda",
+			anim = "VientoDivino",
+			rango = 14,
+			radio = 18,
+			danio = 25,
+			empuje = 90,
+			cooldown = 9,
+			retraso = 0.6,
+			color = Color3.fromRGB(150, 255, 210),
+		},
+		{
+			nombre = "Paso Sagrado",
+			tipo = "Teletransporte",
+			anim = "PasoSagrado",
+			rango = 50,
+			danio = 15,
+			radio = 8,
+			cooldown = 12,
+			retraso = 0.3,
+			color = Color3.fromRGB(255, 205, 60),
+		},
+	},
+	tipo = "GalloQuetzal",
+	rig = {
+		marcador = 2.0,
+		suelo = -5.035,
+		partes = {
+			Cabeza = {
+				padre = "Cuerpo",
+				union = { 0.9244, -0.0, 1.065 },
+			},
+			Penacho = {
+				padre = "Cabeza",
+				union = { 1.5244, -0.0, 2.895 },
+			},
+			AlaIzq = {
+				padre = "Cuerpo",
+				union = { 0.7044, -1.12, 0.915 },
+			},
+			AlaDer = {
+				padre = "Cuerpo",
+				union = { 0.7044, 1.12, 0.915 },
+			},
+			PataIzq = {
+				padre = "Cuerpo",
+				union = { -0.0956, -0.66, -0.985 },
+			},
+			PataDer = {
+				padre = "Cuerpo",
+				union = { -0.0956, 0.66, -0.985 },
+			},
+			Cola1 = {
+				padre = "Cuerpo",
+				union = { -1.7456, -0.0, 0.015 },
+			},
+			Cola2 = {
+				padre = "Cola1",
+				union = { -2.9456, -0.0, -0.485 },
+			},
+			Cola3 = {
+				padre = "Cola2",
+				union = { -4.0956, -0.0, -0.035 },
+			},
+			Cola4 = {
+				padre = "Cola3",
+				union = { -4.6456, -0.0, 1.085 },
+			},
+		},
+		adjuntos = {
+			Cuerpo__Brillo_jade_brillo = "Cuerpo",
+			Cabeza__Brillo_jade_brillo = "Cabeza",
+			Penacho__Brillo_jade_brillo = "Penacho",
+			AlaIzq__Brillo_jade_brillo = "AlaIzq",
+			AlaDer__Brillo_jade_brillo = "AlaDer",
+			PataIzq__Brillo_jade_brillo = "PataIzq",
+			PataDer__Brillo_jade_brillo = "PataDer",
+		},
+	},
+	coloresBrillo = {
+		Cuerpo__Brillo_jade_brillo = Color3.fromRGB(76, 255, 158),
+		Cabeza__Brillo_jade_brillo = Color3.fromRGB(76, 255, 158),
+		Penacho__Brillo_jade_brillo = Color3.fromRGB(76, 255, 158),
+		AlaIzq__Brillo_jade_brillo = Color3.fromRGB(76, 255, 158),
+		AlaDer__Brillo_jade_brillo = Color3.fromRGB(76, 255, 158),
+		PataIzq__Brillo_jade_brillo = Color3.fromRGB(76, 255, 158),
+		PataDer__Brillo_jade_brillo = Color3.fromRGB(76, 255, 158),
+	},
+	animaciones = {
+		ciclos = {
+			Idle = {
+				Raiz = {
+					{ "py", 0.06, 0.8, 0 },
+					{ "rx", 1.5, 0.4, 0.3 },
+				},
+				Cabeza = {
+					{ "rx", 4, 0.8, 0.1 },
+					{ "ry", 10, 0.3, 0 },
+				},
+				Penacho = {
+					{ "rx", 3, 0.8, 0.35 },
+					{ "rz", 2, 0.5, 0 },
+				},
+				AlaIzq = {
+					{ "rz", -3, 0.8, 0 },
+				},
+				PataIzq = {
+					{ "rx", -1.5, 0.4, 0.3 },
+				},
+				PataDer = {
+					{ "rx", -1.5, 0.4, 0.3 },
+				},
+				Cola1 = {
+					{ "ry", 6.0, 0.6, 0.0 },
+					{ "rx", 3, 0.6, 0.25 },
+				},
+				Cola2 = {
+					{ "ry", 10, 0.6, 0.17 },
+					{ "rx", 3, 0.6, 0.42 },
+				},
+				Cola3 = {
+					{ "ry", 6.0, 0.6, 0.34 },
+					{ "rz", -7.0, 0.6, 0.34 },
+					{ "rx", 3, 0.6, 0.59 },
+				},
+				Cola4 = {
+					{ "rz", -12.0, 0.6, 0.51 },
+					{ "rx", 3.9, 0.6, 0.76 },
+				},
+				AlaDer = {
+					{ "rz", 3, 0.8, 0 },
+				},
+			},
+			Caminar = {
+				Raiz = {
+					{ "py", 0.14, 3.2, 0.25 },
+					{ "rz", 3, 1.6, 0 },
+					{ "ry", 3, 1.6, 0.25 },
+				},
+				Cabeza = {
+					{ "pz", 0.18, 3.2, 0 },
+					{ "rx", 5, 3.2, 0.25 },
+				},
+				Penacho = {
+					{ "rx", 5, 3.2, 0.4 },
+					{ "rz", 3, 1.6, 0.1 },
+				},
+				AlaIzq = {
+					{ "rz", -7, 1.6, 0.25 },
+				},
+				PataIzq = {
+					{ "rx", 27, 1.6, 0 },
+				},
+				PataDer = {
+					{ "rx", 27, 1.6, 0.5 },
+				},
+				Cola1 = {
+					{ "ry", 7.2, 1.6, 0.0 },
+					{ "rx", 3, 1.6, 0.25 },
+				},
+				Cola2 = {
+					{ "ry", 12, 1.6, 0.17 },
+					{ "rx", 3, 1.6, 0.42 },
+				},
+				Cola3 = {
+					{ "ry", 7.2, 1.6, 0.34 },
+					{ "rz", -8.4, 1.6, 0.34 },
+					{ "rx", 3, 1.6, 0.59 },
+				},
+				Cola4 = {
+					{ "rz", -14.4, 1.6, 0.51 },
+					{ "rx", 3.9, 1.6, 0.76 },
+				},
+				AlaDer = {
+					{ "rz", 7, 1.6, 0.25 },
+				},
+			},
+		},
+		clips = {
+			MordidaSerpiente = {
+				duracion = 0.95,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.18,
+						pose = {
+							Cabeza = {
+								rx = 25,
+								pz = 0.1,
+							},
+							Penacho = {
+								rx = -8,
+							},
+							AlaIzq = {
+								rz = -18,
+							},
+							Cola1 = {
+								rx = 14,
+							},
+							Cola2 = {
+								rx = 12,
+								ry = 8,
+							},
+							Cola3 = {
+								rx = 10,
+							},
+							Cola4 = {
+								rx = 10,
+							},
+							Raiz = {
+								rx = 8,
+								pz = 0.3,
+							},
+							PataIzq = {
+								rx = -8,
+							},
+							PataDer = {
+								rx = -8,
+							},
+							AlaDer = {
+								rz = 18,
+							},
+						},
+					},
+					{
+						t = 0.35,
+						pose = {
+							Cabeza = {
+								rx = -40,
+								pz = -0.3,
+							},
+							Penacho = {
+								rx = 15,
+							},
+							AlaIzq = {
+								rz = -35,
+								ry = -15,
+							},
+							Cola1 = {
+								rx = -18,
+							},
+							Cola2 = {
+								rx = -24,
+							},
+							Cola3 = {
+								rx = -28,
+							},
+							Cola4 = {
+								rx = -32,
+							},
+							Raiz = {
+								rx = -12,
+								pz = -0.5,
+							},
+							PataIzq = {
+								rx = 12,
+							},
+							PataDer = {
+								rx = 12,
+							},
+							AlaDer = {
+								rz = 35,
+								ry = 15,
+							},
+						},
+					},
+					{
+						t = 0.5,
+						pose = {
+							Cabeza = {
+								rx = -25,
+								pz = -0.2,
+							},
+							Penacho = {
+								rx = 8,
+							},
+							AlaIzq = {
+								rz = -22,
+							},
+							Cola1 = {
+								rx = -12,
+							},
+							Cola2 = {
+								rx = -16,
+							},
+							Cola3 = {
+								rx = -18,
+							},
+							Cola4 = {
+								rx = -12,
+							},
+							Raiz = {
+								rx = -8,
+								pz = -0.35,
+							},
+							PataIzq = {
+								rx = 8,
+							},
+							PataDer = {
+								rx = 8,
+							},
+							AlaDer = {
+								rz = 22,
+							},
+						},
+					},
+					{
+						t = 0.95,
+						pose = {},
+					},
+				},
+			},
+			LluviaPlumas = {
+				duracion = 1.1,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.25,
+						pose = {
+							Cabeza = {
+								rx = 18,
+							},
+							Penacho = {
+								rx = -14,
+							},
+							AlaIzq = {
+								rx = -60,
+								ry = -30,
+								rz = -75,
+							},
+							Cola1 = {
+								rx = -8,
+							},
+							Cola3 = {
+								rx = -8,
+							},
+							Cola4 = {
+								rx = -18,
+							},
+							Raiz = {
+								py = 0.12,
+								rx = 8,
+								pz = 0.2,
+							},
+							PataIzq = {
+								rx = -8,
+							},
+							PataDer = {
+								rx = -8,
+							},
+							AlaDer = {
+								rx = -60,
+								ry = 30,
+								rz = 75,
+							},
+						},
+					},
+					{
+						t = 0.4,
+						pose = {
+							Cabeza = {
+								rx = -18,
+								pz = -0.15,
+							},
+							Penacho = {
+								rx = 16,
+							},
+							AlaIzq = {
+								rx = 5,
+								ry = -100,
+								rz = -45,
+							},
+							Cola1 = {
+								rx = 6,
+							},
+							Cola2 = {
+								rx = 4,
+							},
+							Cola4 = {
+								rx = 12,
+							},
+							Raiz = {
+								rx = -10,
+								pz = -0.25,
+							},
+							PataIzq = {
+								rx = 10,
+							},
+							PataDer = {
+								rx = 10,
+							},
+							AlaDer = {
+								rx = 5,
+								ry = 100,
+								rz = 45,
+							},
+						},
+					},
+					{
+						t = 0.6,
+						pose = {
+							Cabeza = {
+								rx = -8,
+							},
+							Penacho = {
+								rx = 6,
+							},
+							AlaIzq = {
+								rx = 0,
+								ry = -65,
+								rz = -25,
+							},
+							Raiz = {
+								rx = -6,
+								pz = -0.12,
+							},
+							PataIzq = {
+								rx = 6,
+							},
+							PataDer = {
+								rx = 6,
+							},
+							AlaDer = {
+								rx = 0,
+								ry = 65,
+								rz = 25,
+							},
+						},
+					},
+					{
+						t = 1.1,
+						pose = {},
+					},
+				},
+			},
+			VientoDivino = {
+				duracion = 1.4,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.2,
+						pose = {
+							Cabeza = {
+								rx = -10,
+							},
+							AlaIzq = {
+								rz = -25,
+								ry = -15,
+							},
+							Raiz = {
+								py = -0.1,
+								rx = -6,
+							},
+							PataIzq = {
+								rx = 6,
+							},
+							PataDer = {
+								rx = 6,
+							},
+							AlaDer = {
+								rz = 25,
+								ry = 15,
+							},
+						},
+					},
+					{
+						t = 0.42,
+						pose = {
+							Cabeza = {
+								rx = 20,
+							},
+							Penacho = {
+								rx = -12,
+							},
+							AlaIzq = {
+								rx = -75,
+								ry = -30,
+								rz = -85,
+							},
+							Cola1 = {
+								rx = -10,
+							},
+							Cola2 = {
+								rx = -8,
+							},
+							Cola3 = {
+								rx = -8,
+							},
+							Cola4 = {
+								rx = -12,
+							},
+							Raiz = {
+								py = 0.55,
+								rx = 10,
+							},
+							PataIzq = {
+								rx = -10,
+							},
+							PataDer = {
+								rx = -10,
+							},
+							AlaDer = {
+								rx = -75,
+								ry = 30,
+								rz = 85,
+							},
+						},
+					},
+					{
+						t = 0.6,
+						pose = {
+							Cabeza = {
+								rx = -20,
+							},
+							Penacho = {
+								rx = 22,
+							},
+							AlaIzq = {
+								rx = 25,
+								ry = -45,
+								rz = -50,
+							},
+							Cola1 = {
+								rx = 10,
+							},
+							Cola2 = {
+								rx = 10,
+							},
+							Cola3 = {
+								rx = 8,
+							},
+							Cola4 = {
+								rx = 14,
+							},
+							Raiz = {
+								py = -0.1,
+								rx = -8,
+							},
+							PataIzq = {
+								rx = 8,
+							},
+							PataDer = {
+								rx = 8,
+							},
+							AlaDer = {
+								rx = 25,
+								ry = 45,
+								rz = 50,
+							},
+						},
+					},
+					{
+						t = 0.85,
+						pose = {
+							Cabeza = {
+								rx = -10,
+							},
+							Penacho = {
+								rx = 10,
+							},
+							AlaIzq = {
+								rx = 10,
+								ry = -25,
+								rz = -25,
+							},
+							Cola4 = {
+								rx = 5,
+							},
+							Raiz = {
+								py = -0.06,
+								rx = -5,
+							},
+							PataIzq = {
+								rx = 5,
+							},
+							PataDer = {
+								rx = 5,
+							},
+							AlaDer = {
+								rx = 10,
+								ry = 25,
+								rz = 25,
+							},
+						},
+					},
+					{
+						t = 1.4,
+						pose = {},
+					},
+				},
+			},
+			PasoSagrado = {
+				duracion = 1.0,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.15,
+						pose = {
+							Cabeza = {
+								rx = -25,
+								pz = -0.15,
+							},
+							Penacho = {
+								rx = 20,
+							},
+							AlaIzq = {
+								rz = 8,
+								ry = 8,
+							},
+							Cola1 = {
+								rx = 10,
+							},
+							Cola2 = {
+								rx = 12,
+							},
+							Cola3 = {
+								rx = 10,
+							},
+							Cola4 = {
+								rx = 8,
+							},
+							Raiz = {
+								py = -0.08,
+								rx = -10,
+							},
+							PataIzq = {
+								rx = 10,
+							},
+							PataDer = {
+								rx = 10,
+							},
+							AlaDer = {
+								rz = -8,
+								ry = -8,
+							},
+						},
+					},
+					{
+						t = 0.3,
+						pose = {
+							Cabeza = {
+								rx = 22,
+							},
+							Penacho = {
+								rx = -18,
+							},
+							AlaIzq = {
+								rx = -50,
+								ry = -45,
+								rz = -75,
+							},
+							Cola1 = {
+								rx = -12,
+							},
+							Cola2 = {
+								rx = -14,
+							},
+							Cola3 = {
+								rx = -10,
+							},
+							Cola4 = {
+								rx = -18,
+							},
+							Raiz = {
+								py = 0.3,
+								rx = 6,
+							},
+							PataIzq = {
+								rx = -6,
+							},
+							PataDer = {
+								rx = -6,
+							},
+							AlaDer = {
+								rx = -50,
+								ry = 45,
+								rz = 75,
+							},
+						},
+					},
+					{
+						t = 0.55,
+						pose = {
+							Cabeza = {
+								rx = 10,
+							},
+							Penacho = {
+								rx = -8,
+							},
+							AlaIzq = {
+								rx = -30,
+								ry = -30,
+								rz = -45,
+							},
+							Cola4 = {
+								rx = -8,
+							},
+							Raiz = {
+								py = 0.12,
+								rx = 3,
+							},
+							PataIzq = {
+								rx = -3,
+							},
+							PataDer = {
+								rx = -3,
+							},
+							AlaDer = {
+								rx = -30,
+								ry = 30,
+								rz = 45,
+							},
+						},
+					},
+					{
+						t = 1.0,
+						pose = {},
+					},
+				},
+			},
+			Golpeado = {
+				duracion = 0.4,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.1,
+						pose = {
+							Cabeza = {
+								rx = 20,
+							},
+							Penacho = {
+								rx = -10,
+							},
+							AlaIzq = {
+								rz = -20,
+							},
+							Cola2 = {
+								ry = 10,
+							},
+							Cola4 = {
+								rz = -12,
+							},
+							Raiz = {
+								rx = 8,
+								pz = 0.3,
+							},
+							PataIzq = {
+								rx = -8,
+							},
+							PataDer = {
+								rx = -8,
+							},
+							AlaDer = {
+								rz = 20,
+							},
+						},
+					},
+					{
+						t = 0.4,
+						pose = {},
+					},
+				},
+			},
+			Derrota = {
+				duracion = 1.6,
+				claves = {
+					{
+						t = 0.0,
+						pose = {},
+					},
+					{
+						t = 0.3,
+						pose = {
+							Cabeza = {
+								rx = 30,
+							},
+							Penacho = {
+								rx = -10,
+							},
+							AlaIzq = {
+								rz = -50,
+							},
+							Cola4 = {
+								rx = -15,
+							},
+							Raiz = {
+								rx = 12,
+								py = 0.1,
+							},
+							PataIzq = {
+								rx = -12,
+							},
+							PataDer = {
+								rx = -12,
+							},
+							AlaDer = {
+								rz = 50,
+							},
+						},
+					},
+					{
+						t = 0.65,
+						pose = {
+							Cabeza = {
+								rx = -20,
+								ry = 20,
+							},
+							Penacho = {
+								rx = 20,
+							},
+							AlaIzq = {
+								rz = -25,
+							},
+							Raiz = {
+								rx = 4,
+								rz = -10,
+							},
+							PataIzq = {
+								rx = -4,
+							},
+							PataDer = {
+								rx = -4,
+							},
+							AlaDer = {
+								rz = 25,
+							},
+						},
+					},
+					{
+						t = 1.05,
+						pose = {
+							Raiz = {
+								rx = -10,
+								py = -1.0,
+							},
+							PataIzq = {
+								rx = -55,
+							},
+							PataDer = {
+								rx = -55,
+							},
+							Cabeza = {
+								rx = -10,
+								ry = 25,
+							},
+							Penacho = {
+								rx = 25,
+							},
+							AlaIzq = {
+								rz = -35,
+								ry = -15,
+							},
+							Cola3 = {
+								rx = 15,
+							},
+							Cola4 = {
+								rx = 10,
+							},
+							AlaDer = {
+								rz = 35,
+								ry = 15,
+							},
+						},
+					},
+					{
+						t = 1.6,
+						pose = {
+							Raiz = {
+								rx = -18,
+								py = -3.3,
+							},
+							PataIzq = {
+								rx = -72,
+							},
+							PataDer = {
+								rx = -72,
+							},
+							Cabeza = {
+								rx = -35,
+								ry = 35,
+							},
+							Penacho = {
+								rx = 40,
+							},
+							AlaIzq = {
+								rz = -15,
+								ry = -35,
+							},
+							Cola1 = {
+								rx = 12,
+							},
+							Cola2 = {
+								rx = 15,
+								ry = -12,
+							},
+							Cola3 = {
+								rx = 45,
+								ry = -10,
+							},
+							Cola4 = {
+								rx = 45,
+							},
+							AlaDer = {
+								rz = 15,
+								ry = 35,
+							},
+						},
+					},
+				},
+			},
+		},
+	},
+}
+]]></ProtectedString>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="18">
+          <Properties>
             <string name="Name">GalloRelampago</string>
             <ProtectedString name="Source"><![CDATA[-- Generado por herramientas/criaturas/generar.py. No lo edites a mano: cambia el archivo
 -- herramientas/criaturas/gallorelampago.py y vuelve a generar.
@@ -2376,6 +4295,7 @@ return {
 				Cola2 = {
 					{ "rx", 5, 0.6, 0.4 },
 					{ "ry", 4, 0.4, 0.25 },
+					{ "rz", 2.5, 4.5, 0 },
 				},
 				AlaDer = {
 					{ "rz", 4, 1.2, 0 },
@@ -2512,26 +4432,28 @@ return {
 						pose = {},
 					},
 					{
-						t = 0.28,
+						t = 0.25,
 						pose = {
 							Raiz = {
-								py = -0.1,
-								rx = -6,
+								py = -0.08,
+								rx = -8,
 							},
 							Cabeza = {
-								rx = -12,
+								rx = -15,
 							},
 							Cresta = {
 								rx = -12,
 							},
 							AlaIzq = {
-								rz = -40,
+								rz = -25,
+								ry = -10,
 							},
 							Cola1 = {
 								rx = 6,
 							},
 							AlaDer = {
-								rz = 40,
+								rz = 25,
+								ry = 10,
 							},
 						},
 					},
@@ -2540,17 +4462,18 @@ return {
 						pose = {
 							Raiz = {
 								py = 0.35,
-								rx = 10,
+								rx = 8,
 							},
 							Cabeza = {
 								rx = 22,
 							},
 							Cresta = {
-								rx = 20,
+								rx = 18,
 							},
 							AlaIzq = {
-								rz = -80,
-								ry = -15,
+								rx = -68,
+								ry = -35,
+								rz = -45,
 							},
 							Cola1 = {
 								rx = -15,
@@ -2558,9 +4481,16 @@ return {
 							Cola2 = {
 								rx = -10,
 							},
+							PataIzq = {
+								rx = 8,
+							},
+							PataDer = {
+								rx = 8,
+							},
 							AlaDer = {
-								rz = 80,
-								ry = 15,
+								rx = -68,
+								ry = 35,
+								rz = 45,
 							},
 						},
 					},
@@ -2569,17 +4499,18 @@ return {
 						pose = {
 							Raiz = {
 								py = 0.25,
-								rx = 8,
+								rx = 6,
 							},
 							Cabeza = {
-								rx = 16,
+								rx = 15,
 							},
 							Cresta = {
-								rx = 14,
+								rx = 12,
 							},
 							AlaIzq = {
-								rz = -70,
-								ry = -12,
+								rx = -60,
+								ry = -30,
+								rz = -40,
 							},
 							Cola1 = {
 								rx = -12,
@@ -2587,9 +4518,16 @@ return {
 							Cola2 = {
 								rx = 6,
 							},
+							PataIzq = {
+								rx = 5,
+							},
+							PataDer = {
+								rx = 5,
+							},
 							AlaDer = {
-								rz = 70,
-								ry = 12,
+								rx = -60,
+								ry = 30,
+								rz = 40,
 							},
 						},
 					},
@@ -2861,7 +4799,7 @@ return {
 ]]></ProtectedString>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="17">
+        <Item class="ModuleScript" referent="19">
           <Properties>
             <string name="Name">GalloSamurai</string>
             <ProtectedString name="Source"><![CDATA[-- Generado por herramientas/criaturas/generar.py. No lo edites a mano: cambia el archivo
@@ -2917,35 +4855,35 @@ return {
 	tipo = "GalloSamurai",
 	rig = {
 		marcador = 2.0,
-		suelo = -2.9148,
+		suelo = -3.0944,
 		partes = {
 			Cabeza = {
 				padre = "Cuerpo",
-				union = { 0.9056, 0.1759, 1.0351 },
+				union = { 1.0589, 0.1672, 1.2055 },
 			},
 			AlaIzq = {
 				padre = "Cuerpo",
-				union = { 0.3056, -0.8241, 0.9351 },
+				union = { 0.4589, -0.8328, 1.1055 },
 			},
 			AlaDer = {
 				padre = "Cuerpo",
-				union = { 0.3056, 1.1759, 0.9351 },
+				union = { 0.4589, 1.1672, 1.1055 },
 			},
 			PataIzq = {
 				padre = "Cuerpo",
-				union = { -0.3144, -0.3241, -0.7649 },
+				union = { -0.1611, -0.3328, -0.6445 },
 			},
 			PataDer = {
 				padre = "Cuerpo",
-				union = { -0.3144, 0.6759, -0.7649 },
+				union = { -0.1611, 0.6672, -0.6445 },
 			},
 			Cola = {
 				padre = "Cuerpo",
-				union = { -1.4444, 0.1759, 0.4851 },
+				union = { -1.2411, 0.1672, 0.6555 },
 			},
 			Bandera = {
 				padre = "Cuerpo",
-				union = { -0.8944, 0.1759, 0.9851 },
+				union = { -0.7411, 0.1672, 1.1555 },
 			},
 		},
 		adjuntos = {
@@ -3025,22 +4963,27 @@ return {
 						t = 0.15,
 						pose = {
 							Raiz = {
-								ry = -18,
-								py = -0.05,
+								ry = -20,
+								rx = 3,
 							},
 							AlaDer = {
 								rx = 55,
-								rz = 35,
-								ry = -15,
+								rz = 30,
+								ry = -10,
 							},
 							AlaIzq = {
-								rz = -10,
+								rz = -12,
+								rx = 5,
 							},
 							Cabeza = {
-								ry = -10,
+								ry = -8,
+								rx = 5,
 							},
 							Bandera = {
 								rx = -4,
+							},
+							Cola = {
+								rx = 4,
 							},
 						},
 					},
@@ -3048,27 +4991,34 @@ return {
 						t = 0.3,
 						pose = {
 							Raiz = {
-								ry = 20,
-								pz = -0.5,
+								ry = 22,
+								pz = -0.55,
 								rx = -8,
+								py = 0.02,
 							},
 							AlaDer = {
-								rx = -55,
-								rz = -10,
-								ry = 35,
+								rx = -42,
+								ry = 25,
+								rz = 8,
 							},
 							AlaIzq = {
-								rz = -25,
-								rx = 10,
+								rz = -28,
+								rx = -10,
 							},
 							Cabeza = {
-								rx = -10,
-								ry = 10,
+								rx = -8,
+								ry = 6,
 							},
 							Bandera = {
-								rx = 8,
+								rx = 9,
 							},
 							Cola = {
+								rx = -8,
+							},
+							PataIzq = {
+								rx = 10,
+							},
+							PataDer = {
 								rx = -8,
 							},
 						},
@@ -3077,28 +5027,35 @@ return {
 						t = 0.45,
 						pose = {
 							Raiz = {
-								ry = 24,
-								pz = -0.4,
+								ry = 26,
+								pz = -0.45,
 								rx = -6,
+								py = 0.02,
 							},
 							AlaDer = {
-								rx = -62,
-								rz = -15,
-								ry = 45,
+								rx = -52,
+								ry = 28,
+								rz = 5,
 							},
 							AlaIzq = {
-								rz = -20,
-								rx = 8,
+								rz = -22,
+								rx = -6,
 							},
 							Cabeza = {
-								rx = -6,
-								ry = 8,
+								rx = -5,
+								ry = 6,
 							},
 							Bandera = {
 								rx = 5,
 							},
 							Cola = {
 								rx = -5,
+							},
+							PataIzq = {
+								rx = 8,
+							},
+							PataDer = {
+								rx = -7,
 							},
 						},
 					},
@@ -3120,20 +5077,24 @@ return {
 						pose = {
 							Raiz = {
 								ry = 35,
-								py = -0.15,
+								py = -0.03,
 							},
 							AlaDer = {
-								rz = 70,
-								rx = -20,
-								ry = -10,
+								rz = 55,
+								ry = -70,
+								rx = -50,
 							},
 							AlaIzq = {
-								rz = -50,
+								rz = -55,
+								rx = -10,
 							},
 							Cabeza = {
 								ry = -15,
 							},
 							Bandera = {
+								rz = -6,
+							},
+							Cola = {
 								rz = -6,
 							},
 						},
@@ -3143,20 +5104,24 @@ return {
 						pose = {
 							Raiz = {
 								ry = 395,
-								py = -0.15,
+								py = -0.03,
 							},
 							AlaDer = {
-								rz = 70,
-								rx = -20,
-								ry = -10,
+								rz = 55,
+								ry = -70,
+								rx = -50,
 							},
 							AlaIzq = {
-								rz = -50,
+								rz = -55,
+								rx = -10,
 							},
 							Cabeza = {
 								ry = -15,
 							},
 							Bandera = {
+								rz = -6,
+							},
+							Cola = {
 								rz = -6,
 							},
 						},
@@ -3166,21 +5131,25 @@ return {
 						pose = {
 							Raiz = {
 								ry = 0,
-								py = -0.1,
+								py = -0.02,
 							},
 							AlaDer = {
-								rz = 70,
-								rx = -20,
-								ry = -10,
+								rz = 55,
+								ry = -70,
+								rx = -50,
 							},
 							AlaIzq = {
-								rz = -50,
+								rz = -55,
+								rx = -10,
 							},
 							Cabeza = {
-								ry = 10,
+								ry = 12,
 							},
 							Bandera = {
-								rz = 10,
+								rz = 12,
+							},
+							Cola = {
+								rz = 12,
 							},
 						},
 					},
@@ -3201,55 +5170,57 @@ return {
 						t = 0.2,
 						pose = {
 							Raiz = {
-								py = -0.08,
-								rx = 4,
+								ry = -12,
 							},
 							AlaDer = {
-								rx = 35,
-								ry = 40,
-								rz = 10,
+								rx = 25,
+								ry = 25,
 							},
 							AlaIzq = {
-								rx = 15,
-								ry = -25,
-								rz = -15,
+								rz = -25,
+								rx = 10,
 							},
 							Cabeza = {
-								rx = -8,
+								rx = -6,
+								ry = 6,
 							},
 							PataIzq = {
-								rx = -10,
+								rx = 8,
 							},
 							PataDer = {
-								rx = 10,
+								rx = -8,
+							},
+							Bandera = {
+								rx = 4,
 							},
 						},
 					},
 					{
-						t = 0.75,
+						t = 0.8,
 						pose = {
 							Raiz = {
-								py = -0.08,
-								rx = 4,
+								ry = -12,
 							},
 							AlaDer = {
-								rx = 35,
-								ry = 40,
-								rz = 10,
+								rx = 27,
+								ry = 25,
 							},
 							AlaIzq = {
-								rx = 15,
-								ry = -25,
-								rz = -15,
+								rz = -25,
+								rx = 10,
 							},
 							Cabeza = {
-								rx = -8,
+								rx = -6,
+								ry = 6,
 							},
 							PataIzq = {
-								rx = -10,
+								rx = 8,
 							},
 							PataDer = {
-								rx = 10,
+								rx = -8,
+							},
+							Bandera = {
+								rx = 4,
 							},
 						},
 					},
@@ -3282,6 +5253,9 @@ return {
 							AlaDer = {
 								rz = 10,
 							},
+							Bandera = {
+								rx = -8,
+							},
 						},
 					},
 					{
@@ -3301,24 +5275,27 @@ return {
 						t = 0.35,
 						pose = {
 							Raiz = {
-								py = -0.2,
+								py = -0.05,
 								rx = -12,
 							},
 							Cabeza = {
 								rx = -20,
 							},
 							AlaDer = {
-								rx = -40,
-								rz = -10,
-							},
-							AlaIzq = {
+								rx = -30,
 								rz = 10,
 							},
+							AlaIzq = {
+								rz = -10,
+							},
 							PataIzq = {
-								rx = -20,
+								rx = 15,
 							},
 							PataDer = {
-								rx = -20,
+								rx = 15,
+							},
+							Bandera = {
+								rx = 8,
 							},
 						},
 					},
@@ -3326,7 +5303,7 @@ return {
 						t = 1.2,
 						pose = {
 							Raiz = {
-								py = -1.55,
+								py = -1.36,
 								rz = 82,
 								rx = -8,
 							},
@@ -3339,13 +5316,13 @@ return {
 								rx = -20,
 							},
 							AlaIzq = {
-								rz = 15,
+								rz = -20,
 							},
 							PataIzq = {
-								rx = -30,
+								rx = 30,
 							},
 							PataDer = {
-								rx = 15,
+								rx = -15,
 							},
 							Bandera = {
 								rz = -15,
@@ -3363,7 +5340,7 @@ return {
 ]]></ProtectedString>
           </Properties>
         </Item>
-        <Item class="ModuleScript" referent="18">
+        <Item class="ModuleScript" referent="20">
           <Properties>
             <string name="Name">PollitoBomba</string>
             <ProtectedString name="Source"><![CDATA[-- Generado por herramientas/criaturas/generar.py. No lo edites a mano: cambia el archivo

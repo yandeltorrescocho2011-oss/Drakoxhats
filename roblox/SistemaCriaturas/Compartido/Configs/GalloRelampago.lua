@@ -138,6 +138,7 @@ return {
 				Cola2 = {
 					{ "rx", 5, 0.6, 0.4 },
 					{ "ry", 4, 0.4, 0.25 },
+					{ "rz", 2.5, 4.5, 0 },
 				},
 				AlaDer = {
 					{ "rz", 4, 1.2, 0 },
@@ -274,26 +275,28 @@ return {
 						pose = {},
 					},
 					{
-						t = 0.28,
+						t = 0.25,
 						pose = {
 							Raiz = {
-								py = -0.1,
-								rx = -6,
+								py = -0.08,
+								rx = -8,
 							},
 							Cabeza = {
-								rx = -12,
+								rx = -15,
 							},
 							Cresta = {
 								rx = -12,
 							},
 							AlaIzq = {
-								rz = -40,
+								rz = -25,
+								ry = -10,
 							},
 							Cola1 = {
 								rx = 6,
 							},
 							AlaDer = {
-								rz = 40,
+								rz = 25,
+								ry = 10,
 							},
 						},
 					},
@@ -302,17 +305,18 @@ return {
 						pose = {
 							Raiz = {
 								py = 0.35,
-								rx = 10,
+								rx = 8,
 							},
 							Cabeza = {
 								rx = 22,
 							},
 							Cresta = {
-								rx = 20,
+								rx = 18,
 							},
 							AlaIzq = {
-								rz = -80,
-								ry = -15,
+								rx = -68,
+								ry = -35,
+								rz = -45,
 							},
 							Cola1 = {
 								rx = -15,
@@ -320,9 +324,16 @@ return {
 							Cola2 = {
 								rx = -10,
 							},
+							PataIzq = {
+								rx = 8,
+							},
+							PataDer = {
+								rx = 8,
+							},
 							AlaDer = {
-								rz = 80,
-								ry = 15,
+								rx = -68,
+								ry = 35,
+								rz = 45,
 							},
 						},
 					},
@@ -331,17 +342,18 @@ return {
 						pose = {
 							Raiz = {
 								py = 0.25,
-								rx = 8,
+								rx = 6,
 							},
 							Cabeza = {
-								rx = 16,
+								rx = 15,
 							},
 							Cresta = {
-								rx = 14,
+								rx = 12,
 							},
 							AlaIzq = {
-								rz = -70,
-								ry = -12,
+								rx = -60,
+								ry = -30,
+								rz = -40,
 							},
 							Cola1 = {
 								rx = -12,
@@ -349,9 +361,16 @@ return {
 							Cola2 = {
 								rx = 6,
 							},
+							PataIzq = {
+								rx = 5,
+							},
+							PataDer = {
+								rx = 5,
+							},
 							AlaDer = {
-								rz = 70,
-								ry = 12,
+								rx = -60,
+								ry = 30,
+								rz = 40,
 							},
 						},
 					},
